@@ -6,6 +6,8 @@ KEY=${TUG_KEY:-$HOME/.ssh/zec_vps}
 cd "$(git rev-parse --show-toplevel)"
 test -z "$(git status --porcelain)" || { echo "commit first"; exit 1; }
 rev=$(git rev-parse --short HEAD)
+# Restart only in the quiet part of the 5-minute cycle (snapshots run from :00 to about :02).
+while :; do sec=$(( $(date -u +%s) % 300 )); [ "$sec" -ge 170 ] && [ "$sec" -le 270 ] && break; sleep 5; done
 tmp=$(mktemp -d); git archive HEAD | tar -x -C "$tmp"; echo "$rev" > "$tmp/REVISION"
 rsync -az --delete --exclude node_modules --exclude data -e "ssh -i $KEY -o BatchMode=yes" "$tmp/" "$HOST:/home/tug/tug/"
 rm -rf "$tmp"

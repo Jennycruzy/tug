@@ -27,6 +27,11 @@ const db = openDb(DB_FILE);
 const log = (msg: string, data?: unknown) =>
   console.log(JSON.stringify({ t: new Date().toISOString(), msg, ...(data ? { data } : {}) }));
 
+const interrupted = db
+  .prepare("UPDATE snapshots SET status='INTERRUPTED', finished_at=? WHERE status='RUNNING' AND network=?")
+  .run(Date.now(), NETWORK).changes;
+if (interrupted) logEvent(db, "engine", "warn", "snapshots left running by a restart were marked interrupted", "E-INTERRUPTED", { interrupted });
+
 setHttpEventSink((e) => logEvent(db, "http", "warn", "A data source asked us to slow down.", e.code, e));
 
 log("engine start", { rules: fp.sha256, version: fp.version, record_start: fp.record_start, network: NETWORK, revision: REVISION });
