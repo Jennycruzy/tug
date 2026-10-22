@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance } from "fastify";
+import { publicSentence } from "@tug/core";
 import { TRADING, killFileFor } from "./config.js";
 import type { Db } from "./db.js";
 import { existsSync } from "node:fs";
@@ -109,7 +110,7 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
   });
 
   const historyQ = db.prepare(
-    `SELECT s.started_at AS at, l.lean_copy, l.lean_fade, l.gap FROM leans l JOIN snapshots s ON s.id = l.snapshot_id
+    `SELECT s.started_at AS at, l.lean_copy, l.lean_fade, l.n_copy, l.n_fade, l.gap FROM leans l JOIN snapshots s ON s.id = l.snapshot_id
      WHERE l.symbol=? AND s.network=? AND s.status='COMPLETE' AND s.started_at>=? ORDER BY s.id`,
   );
   const membersQ = db.prepare(
@@ -154,7 +155,8 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
   const recentQ = db.prepare("SELECT id, started_at, finished_at, status, read_copy, read_fade, errors FROM snapshots WHERE network=? ORDER BY id DESC LIMIT 12");
   const lastCrowdQ = db.prepare("SELECT id, pulled_at, copy_count, fade_count FROM crowd_versions WHERE network=? ORDER BY id DESC LIMIT 1");
   const eventCountQ = db.prepare("SELECT level, COUNT(*) AS n FROM events WHERE ts>=? AND level IN ('warn','error') GROUP BY level");
-  const eventsQ = db.prepare("SELECT ts, component, level, code, message FROM events WHERE ts>=? AND level IN ('warn','error') ORDER BY ts DESC LIMIT 20");
+  // The event's own message is never read here: the public reply carries the code's fixed sentence only.
+  const eventsQ = db.prepare("SELECT ts, component, level, code FROM events WHERE ts>=? AND level IN ('warn','error') ORDER BY ts DESC LIMIT 20");
   const ordersQ = db.prepare("SELECT client_order_id, network, order_id, symbol, side, price, size, status, placed_at, updated_at FROM orders ORDER BY placed_at DESC LIMIT 10");
   const openCountQ = db.prepare("SELECT network, COUNT(*) AS n FROM orders WHERE status IN ('pending','open','partially_filled') GROUP BY network");
 
@@ -177,7 +179,11 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
         kill_switch: { mainnet: existsSync(killFileFor("mainnet")) ? "on" : "off", testnet: existsSync(killFileFor("testnet")) ? "on" : "off" },
       },
       orders: { open: Object.fromEntries((openCountQ.all() as Array<{ network: string; n: number }>).map((r) => [r.network, r.n])), recent: ordersQ.all() },
-      errors_24h: { warn: counts.warn ?? 0, error: counts.error ?? 0, recent: eventsQ.all(since) },
+      errors_24h: {
+        warn: counts.warn ?? 0,
+        error: counts.error ?? 0,
+        recent: (eventsQ.all(since) as Array<{ ts: number; component: string; level: string; code: string | null }>).map((e) => ({ ...e, message: publicSentence(e.code) })),
+      },
     };
   });
 

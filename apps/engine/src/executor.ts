@@ -130,7 +130,7 @@ export class Executor {
     }
     await sleep(3_000);
     for (const symbol of report.cancelled.map((c) => c.symbol)) report.openAfter += (await this.openOrders(symbol)).length;
-    logEvent(this.db, "executor", report.openAfter === 0 ? "info" : "error", "kill switch done", undefined, report);
+    logEvent(this.db, "executor", report.openAfter === 0 ? "info" : "error", "kill switch done", report.openAfter === 0 ? undefined : "E-KILL-LEFT", report);
     return report;
   }
 

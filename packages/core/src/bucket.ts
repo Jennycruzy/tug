@@ -1,38 +1,39 @@
 /**
- * Token bucket measured in request weight per minute. The clock and sleep are injected so the
- * pacing logic is testable without real time.
+ * Request-weight limiter over a sliding 60-second window: a request goes out only if the weight sent in
+ * the last 60 s plus its own stays within `perMinute`, so no 60 s window ever exceeds the budget (a plain
+ * token bucket that starts full lets close to two minutes' weight through in the first minute). The clock
+ * and sleep are injected so the pacing logic is testable without real time.
  */
 export class WeightBucket {
-  private tokens: number;
-  private last: number;
+  private readonly sent: Array<{ t: number; w: number }> = [];
+  private used = 0;
 
   constructor(
     private readonly perMinute: number,
     private readonly now: () => number = Date.now,
     private readonly sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
-  ) {
-    this.tokens = perMinute;
-    this.last = now();
+  ) {}
+
+  private expire(t: number): void {
+    while (this.sent.length > 0 && this.sent[0]!.t <= t - 60_000) this.used -= this.sent.shift()!.w;
   }
 
-  private refill(): void {
-    const t = this.now();
-    const add = ((t - this.last) / 60_000) * this.perMinute;
-    this.tokens = Math.min(this.perMinute, this.tokens + add);
-    this.last = t;
-  }
-
-  /** Waits until `weight` tokens are available, then spends them. */
+  /** Waits until sending `weight` keeps the last 60 s within the budget, then records it as sent. */
   async take(weight: number): Promise<void> {
-    if (weight > this.perMinute) throw new Error(`weight ${weight} exceeds bucket size ${this.perMinute}`);
+    if (weight > this.perMinute) throw new Error(`weight ${weight} exceeds the budget of ${this.perMinute} per minute`);
     for (;;) {
-      this.refill();
-      if (this.tokens >= weight) {
-        this.tokens -= weight;
+      const t = this.now();
+      this.expire(t);
+      if (this.used + weight <= this.perMinute) {
+        this.sent.push({ t, w: weight });
+        this.used += weight;
         return;
       }
-      const missing = weight - this.tokens;
-      await this.sleep(Math.ceil((missing / this.perMinute) * 60_000));
+      // Sleep until enough of the oldest weight leaves the window.
+      let freed = 0;
+      let i = 0;
+      while (freed < this.used + weight - this.perMinute) freed += this.sent[i++]!.w;
+      await this.sleep(Math.max(1, this.sent[i - 1]!.t + 60_000 - t + 1));
     }
   }
 }

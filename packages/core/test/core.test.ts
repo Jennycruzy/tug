@@ -120,6 +120,41 @@ describe("bucket", () => {
     await b.take(30);
     expect(waits.reduce((a, c) => a + c, 0)).toBeGreaterThanOrEqual(30_000);
   });
+
+  it("no 60 s window ever carries more than the budget, from a cold start and under concurrency", async () => {
+    // A snapshot's real load: 548 Hyperliquid members x 3 exchanges x weight 2, sent 8 at a time.
+    let t = 0;
+    const sentAt: Array<{ t: number; w: number }> = [];
+    const timers: Array<{ at: number; go: () => void }> = [];
+    const b = new WeightBucket(1_100, () => t, (ms) => new Promise<void>((go) => timers.push({ at: t + ms, go })));
+    const jobs = Array.from({ length: 548 * 3 }, () => 2);
+    const worker = async () => {
+      for (let w = jobs.pop(); w !== undefined; w = jobs.pop()) {
+        await b.take(w);
+        sentAt.push({ t, w });
+      }
+    };
+    const done = Promise.all(Array.from({ length: 8 }, worker));
+    let finished = false;
+    void done.then(() => (finished = true));
+    while (!finished) {
+      await new Promise((r) => setImmediate(r));
+      if (finished || timers.length === 0) continue;
+      timers.sort((a, c) => a.at - c.at);
+      const next = timers.shift()!;
+      t = Math.max(t, next.at);
+      next.go();
+    }
+    expect(sentAt.length).toBe(548 * 3);
+    for (const s of sentAt) {
+      const inWindow = sentAt.filter((x) => x.t >= s.t && x.t < s.t + 60_000).reduce((a, x) => a + x.w, 0);
+      expect(inWindow).toBeLessThanOrEqual(1_100);
+    }
+    // And it still uses the budget: 3,288 weight at 1,100 per minute finishes in about 3 minutes, inside 4 min 30 s.
+    const last = sentAt[sentAt.length - 1]!.t;
+    expect(last).toBeLessThan(270_000);
+    expect(last).toBeGreaterThanOrEqual(120_000);
+  });
 });
 
 describe("mapping version", () => {

@@ -5,3 +5,4 @@ export * from "./bucket.js";
 export * from "./http.js";
 export * from "./records.js";
 export * from "./rounding.js";
+export * from "./sentences.js";

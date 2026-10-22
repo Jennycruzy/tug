@@ -45,7 +45,7 @@ export interface MarketReply {
   market: Market;
   top: { copy: MemberRow[]; fade: MemberRow[] };
   strike: { copy: MemberRow[]; fade: { n: number; net: number } };
-  history: Array<{ at: number; lean_copy: number; lean_fade: number; gap: number }>;
+  history: Array<{ at: number; lean_copy: number; lean_fade: number; n_copy: number; n_fade: number; gap: number }>;
 }
 
 export interface StatusReply {

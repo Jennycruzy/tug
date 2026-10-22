@@ -160,20 +160,33 @@ function History({ h }: { h: MarketReply["history"] }) {
   const t1 = h[h.length - 1]!.at;
   const x = (t: number) => ((t - t0) / Math.max(1, t1 - t0)) * W;
   const y = (v: number) => ((1 - v) / 2) * H;
-  const path = (k: "lean_copy" | "lean_fade") => h.map((p, i) => `${i ? "L" : "M"}${x(p.at).toFixed(1)},${y(p[k]).toFixed(1)}`).join(" ");
+  // A crowd holding nothing has no lean: the line breaks there instead of reading as an even split at 0.
+  const path = (k: "copy" | "fade") => {
+    let pen = false;
+    return h
+      .map((p) => {
+        if (p[`n_${k}`] === 0) return ((pen = false), "");
+        const cmd = `${pen ? "L" : "M"}${x(p.at).toFixed(1)},${y(p[`lean_${k}`]).toFixed(1)}`;
+        pen = true;
+        return cmd;
+      })
+      .join(" ");
+  };
+  const none = (k: "copy" | "fade") => h.every((p) => p[`n_${k}`] === 0);
   return (
     <figure class="chart card">
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Lean of each crowd over the last 24 hours">
         <line x1="0" x2={W} y1={H / 2} y2={H / 2} class="axis" />
-        <path d={path("lean_copy")} class="ln copy" />
-        <path d={path("lean_fade")} class="ln fade" />
+        <path d={path("copy")} class="ln copy" />
+        <path d={path("fade")} class="ln fade" />
       </svg>
       <figcaption>
         <span>
           long +1 at the top, short −1 at the bottom · {time(t0)} to {time(t1)}
         </span>
         <span>
-          <i class="pin copy" /> copy picks <i class="pin fade" /> fade picks
+          <i class="pin copy" /> copy picks{none("copy") ? " (none holding)" : ""} <i class="pin fade" /> fade picks
+          {none("fade") ? " (none holding)" : ""}
         </span>
       </figcaption>
     </figure>

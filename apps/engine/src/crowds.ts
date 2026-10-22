@@ -176,7 +176,7 @@ export async function buildCrowds(
     logEvent(db, "crowds", "warn", "A market's mapping failed its price check.", "E-MAP", c);
   }
   if (mapping.uncoveredStrikeMarkets.length) {
-    logEvent(db, "crowds", "warn", "Strike maps assets to markets TUG does not cover.", "E-MAP", mapping.uncoveredStrikeMarkets);
+    logEvent(db, "crowds", "warn", "Strike maps assets to markets TUG does not cover.", "E-UNMAPPED", mapping.uncoveredStrikeMarkets);
   }
   logEvent(db, "crowds", "info", "crowds built", undefined, {
     id,

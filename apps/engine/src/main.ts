@@ -53,7 +53,7 @@ async function ensureCrowds(): Promise<void> {
 
 async function cycle(): Promise<void> {
   if (running) {
-    logEvent(db, "engine", "warn", "previous cycle still running; skipped");
+    logEvent(db, "engine", "warn", "previous cycle still running; skipped", "E-SKIPPED");
     return;
   }
   running = true;

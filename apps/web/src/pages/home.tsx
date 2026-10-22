@@ -1,6 +1,6 @@
 import { ago, time, usd, useApi, type Market, type TugReply } from "../api.js";
 import { useNow } from "../now.js";
-import { netWords, Rope, sideWords } from "../rope.js";
+import { netWords, Rope, ropeLabel, sideWords } from "../rope.js";
 
 const REASON: Record<Market["reason"], string> = {
   two_crowds: "The crowds pull opposite ways",
@@ -11,7 +11,7 @@ const REASON: Record<Market["reason"], string> = {
 
 function RopeRow({ m }: { m: Market }) {
   return (
-    <a class={`row ${m.tradable ? "live" : "quiet"}`} href={`/m/${m.symbol}`}>
+    <a class={`row ${m.tradable ? "live" : "quiet"}`} href={`/m/${m.symbol}`} aria-label={`${ropeLabel(m)}. TUG ${sideWords(m.position.live)}. Open ${m.symbol}.`}>
       <div class="row-head">
         <span class="sym">{m.symbol.replace("-USD", "")}</span>
         <span class="why">{REASON[m.reason]}</span>
