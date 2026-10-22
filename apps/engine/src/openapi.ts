@@ -64,7 +64,7 @@ const schemas: Record<string, Schema> = {
     snapshot: obj({ id: int, at: int }),
     market: ref("Market"),
     top: obj({ copy: arr(ref("Member")), fade: arr(ref("Member")) }),
-    strike: obj({ copy: arr(ref("Member")), fade: obj({ n: int, net: num }) }),
+    strike: obj({ copy: arr(ref("Member")), fade: obj({ n: int, net: nullable(num) }) }),
     history: arr(obj({ at: int, lean_copy: num, lean_fade: num, n_copy: int, n_fade: int, gap: num })),
   }),
   Crowds: obj({

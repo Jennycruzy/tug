@@ -69,7 +69,7 @@ describe("privacy of Strike's own traders", () => {
       expect(r.body).not.toContain("fade-check-member");
       expect(r.body).not.toContain("fade-c");
     }
-    expect(market.json().strike.fade.n).toBe(1);
+    expect(market.json().strike.fade).toEqual({ n: 1, net: null });
     expect(crowds.json().members.strike_fade).toEqual({ n: 1 });
     await app.close();
   });

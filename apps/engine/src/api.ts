@@ -43,6 +43,7 @@ interface LeanDbRow {
 }
 
 const SYMBOL = /^[A-Z0-9]{1,16}-USD$/;
+const STRIKE_FADE_MIN_FOR_SIZE = 3;
 const DAY = 86_400_000;
 
 /** Shortened public id: Hyperliquid addresses and Strike account ids alike. */
@@ -136,9 +137,11 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
         .sort((a, b) => Math.abs(b.signed_notional) - Math.abs(a.signed_notional))
         .slice(0, 10)
         .map((m) => ({ id: short(m.member_id), notional: m.signed_notional, score: m.copy_score }));
-    const strikeSide = (crowd: "copy" | "fade") => {
-      const rows = members.filter((m) => m.crowd === crowd && m.platform === "strike");
-      return { n: rows.length, net: rows.reduce((a, m) => a + m.signed_notional, 0) };
+    // Strike's own fade picks: a count, and their net size only when at least three hold the market,
+    // so no single account's position can be read from the total.
+    const strikeFade = () => {
+      const rows = members.filter((m) => m.crowd === "fade" && m.platform === "strike");
+      return { n: rows.length, net: rows.length >= STRIKE_FADE_MIN_FOR_SIZE ? rows.reduce((a, m) => a + m.signed_notional, 0) : null };
     };
     return {
       network: ctx.network,
@@ -148,7 +151,7 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
       // Strike's own copy picks are listed by shortened id; Strike accounts on the fade side only in aggregate.
       strike: {
         copy: members.filter((m) => m.crowd === "copy" && m.platform === "strike").map((m) => ({ id: short(m.member_id), notional: m.signed_notional, score: m.copy_score })),
-        fade: strikeSide("fade"),
+        fade: strikeFade(),
       },
       history: historyQ.all(symbol, ctx.network, Date.now() - DAY),
     };

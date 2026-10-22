@@ -70,7 +70,9 @@ function Body({ d, now }: { d: MarketReply; now: number }) {
           <p class="note">
             {d.strike.fade.n === 0
               ? `None holding ${m.symbol}.`
-              : `${d.strike.fade.n} holding, net ${d.strike.fade.net >= 0 ? "long" : "short"} ${usd(Math.abs(d.strike.fade.net))}. Shown as a total only.`}
+              : d.strike.fade.net === null
+                ? `${d.strike.fade.n} holding. Their size is shown only when at least three hold this market.`
+                : `${d.strike.fade.n} holding, net ${d.strike.fade.net >= 0 ? "long" : "short"} ${usd(Math.abs(d.strike.fade.net))}. Shown as a total only.`}
           </p>
         </div>
       </div>

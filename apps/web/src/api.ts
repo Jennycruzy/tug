@@ -44,7 +44,7 @@ export interface MarketReply {
   snapshot: { id: number; at: number };
   market: Market;
   top: { copy: MemberRow[]; fade: MemberRow[] };
-  strike: { copy: MemberRow[]; fade: { n: number; net: number } };
+  strike: { copy: MemberRow[]; fade: { n: number; net: number | null } };
   history: Array<{ at: number; lean_copy: number; lean_fade: number; n_copy: number; n_fade: number; gap: number }>;
 }
 
