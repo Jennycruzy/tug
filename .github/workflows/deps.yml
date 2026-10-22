@@ -1,0 +1,22 @@
+name: deps
+on: [push, pull_request]
+jobs:
+  allowlist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every dependency is on the allowlist
+        run: |
+          node -e '
+            const fs = require("fs");
+            const allow = new Set(fs.readFileSync(".github/deps-allowlist.txt", "utf8").split("\n").filter(Boolean));
+            const files = require("child_process").execSync("git ls-files \"*package.json\"").toString().trim().split("\n");
+            let bad = [];
+            for (const f of files) {
+              const p = JSON.parse(fs.readFileSync(f, "utf8"));
+              for (const k of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"])
+                for (const n of Object.keys(p[k] || {})) if (!allow.has(n)) bad.push(`${f}: ${n}`);
+            }
+            if (bad.length) { console.log(bad.join("\n")); process.exit(1); }
+            console.log(`${files.length} manifests checked`);
+          '

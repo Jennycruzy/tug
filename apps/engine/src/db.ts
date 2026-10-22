@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS crowd_versions (
   fade_count INTEGER NOT NULL,
   member_hash TEXT NOT NULL,
   raw_sha256 TEXT NOT NULL,
-  pages INTEGER NOT NULL
+  pages INTEGER NOT NULL,
+  network TEXT NOT NULL DEFAULT 'mainnet',
+  mapping_json TEXT
 );
 CREATE TABLE IF NOT EXISTS crowd_members (
   version_id INTEGER NOT NULL REFERENCES crowd_versions(id),
@@ -34,7 +36,8 @@ CREATE TABLE IF NOT EXISTS snapshots (
   read_fade REAL,
   status TEXT NOT NULL,
   raw_sha256 TEXT,
-  errors INTEGER NOT NULL DEFAULT 0
+  errors INTEGER NOT NULL DEFAULT 0,
+  network TEXT NOT NULL DEFAULT 'mainnet'
 );
 CREATE TABLE IF NOT EXISTS positions (
   snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
@@ -42,7 +45,8 @@ CREATE TABLE IF NOT EXISTS positions (
   member_id TEXT NOT NULL,
   crowd TEXT NOT NULL,
   symbol TEXT NOT NULL,
-  signed_notional REAL NOT NULL
+  signed_notional REAL NOT NULL,
+  account_value REAL
 );
 CREATE INDEX IF NOT EXISTS positions_snapshot ON positions(snapshot_id);
 CREATE TABLE IF NOT EXISTS marks (
@@ -62,6 +66,28 @@ CREATE TABLE IF NOT EXISTS leans (
   reason TEXT NOT NULL,
   PRIMARY KEY (snapshot_id, symbol)
 );
+CREATE TABLE IF NOT EXISTS paper (
+  snapshot_id INTEGER PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  equity REAL NOT NULL,
+  turnover REAL NOT NULL,
+  fees REAL NOT NULL,
+  funding REAL NOT NULL,
+  positions_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS scoreboard (
+  crowd TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  pnl_usd REAL NOT NULL,
+  PRIMARY KEY (crowd, symbol)
+);
+CREATE TABLE IF NOT EXISTS scoreboard_summary (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  from_ts INTEGER, to_ts INTEGER,
+  copy_pnl REAL, fade_pnl REAL,
+  copy_up INTEGER, copy_active INTEGER, fade_up INTEGER, fade_active INTEGER,
+  snapshots INTEGER
+);
 CREATE TABLE IF NOT EXISTS events (
   ts INTEGER NOT NULL,
   component TEXT NOT NULL,
@@ -79,6 +105,7 @@ export function openDb(path: string): Db {
   db.pragma("synchronous = NORMAL");
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 
@@ -98,4 +125,16 @@ export function logEvent(
     message,
     data === undefined ? null : JSON.stringify(data),
   );
+}
+
+/** Adds columns introduced after the first deployment; safe to run on every start. */
+function migrate(db: Db): void {
+  const add = (table: string, col: string, ddl: string) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  };
+  add("crowd_versions", "network", "network TEXT NOT NULL DEFAULT 'mainnet'");
+  add("crowd_versions", "mapping_json", "mapping_json TEXT");
+  add("snapshots", "network", "network TEXT NOT NULL DEFAULT 'mainnet'");
+  add("positions", "account_value", "account_value REAL");
 }

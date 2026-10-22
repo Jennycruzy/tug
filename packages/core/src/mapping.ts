@@ -1,9 +1,10 @@
 /**
  * Hyperliquid coin → Strike market. One table, checked at every crowd refresh against
  * Strike's own `top_assets` mapping and a price match (see `checkMapping`).
- * Names that differ were matched by price on 2026-10-22 (SKHX ≈ SKHYNIX, GOLD ≈ XAU, ...).
+ * Names that differ were matched by price on 2026-10-22 (SKHX ≈ SKHYNIX, GOLD ≈ XAU, CL ≈ WTI ...).
+ * `cash:WTI` is a different contract (69.4 vs Strike WTI 99.5 on 2026-10-22) and is not used.
  */
-export const HL_DEXES = ["", "xyz", "cash"] as const;
+export const HL_DEXES = ["", "xyz"] as const;
 export type HlDex = (typeof HL_DEXES)[number];
 
 const MAIN = ["ADA", "BNB", "BTC", "DOGE", "ETH", "HYPE", "NEAR", "PUMP", "SOL", "XRP", "ZEC"];
@@ -16,13 +17,13 @@ const XYZ_RENAMED: Record<string, string> = {
   GOLD: "XAU",
   SILVER: "XAG",
   XYZ100: "NAS100",
+  CL: "WTI",
 };
 
 const TABLE = new Map<string, string>();
 for (const c of MAIN) TABLE.set(c, `${c}-USD`);
 for (const c of XYZ_SAME) TABLE.set(`xyz:${c}`, `${c}-USD`);
 for (const [c, s] of Object.entries(XYZ_RENAMED)) TABLE.set(`xyz:${c}`, `${s}-USD`);
-TABLE.set("cash:WTI", "WTI-USD");
 
 /** Markets with no Hyperliquid source; their crowds come from Strike traders only. */
 export const STRIKE_ONLY_MARKETS = ["NIGHT-USD"];

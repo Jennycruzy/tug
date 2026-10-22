@@ -1,26 +1,36 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { assertPublished, loadRules, type Fingerprint } from "@tug/core";
+import { assertPublished, loadRules, setHttpEventSink, type Fingerprint } from "@tug/core";
 import { buildCrowds, loadLatestCrowds, type CrowdVersion } from "./crowds.js";
 import { logEvent, openDb } from "./db.js";
 import { takeSnapshot } from "./recorder.js";
+import { rebuildRecords } from "./records.js";
 
 const ROOT = process.env.TUG_ROOT ?? process.cwd();
+const NETWORK = process.env.TUG_NETWORK ?? "mainnet";
 const RULES_FILE = process.env.TUG_RULES_FILE ?? join(ROOT, "rules/tug-rules-v1.json");
 const DB_FILE = process.env.TUG_DB ?? join(ROOT, "data/tug.db");
 const RAW_DIR = process.env.TUG_RAW_DIR ?? join(ROOT, "data/raw");
+const REVISION = existsSync(join(ROOT, "REVISION")) ? readFileSync(join(ROOT, "REVISION"), "utf8").trim() : "unknown";
+
+interface PublishedFingerprint extends Fingerprint {
+  record_start?: string;
+}
 
 const loaded = loadRules(RULES_FILE);
-const published = JSON.parse(readFileSync(join(ROOT, "evidence/rules-fingerprints.json"), "utf8")) as Fingerprint[];
-const fp = assertPublished(loaded, published);
+const published = JSON.parse(readFileSync(join(ROOT, "evidence/rules-fingerprints.json"), "utf8")) as PublishedFingerprint[];
+const fp = assertPublished(loaded, published) as PublishedFingerprint;
+const recordStartMs = Date.parse(fp.record_start ?? fp.frozen_at);
 const { rules } = loaded;
 const db = openDb(DB_FILE);
 
 const log = (msg: string, data?: unknown) =>
   console.log(JSON.stringify({ t: new Date().toISOString(), msg, ...(data ? { data } : {}) }));
 
-log("engine start", { rules: fp.sha256, version: fp.version, frozen_at: fp.frozen_at, network: process.env.TUG_NETWORK ?? "mainnet" });
-logEvent(db, "engine", "info", "engine start", undefined, { rules: fp.sha256 });
+setHttpEventSink((e) => logEvent(db, "http", "warn", "A data source asked us to slow down.", e.code, e));
+
+log("engine start", { rules: fp.sha256, version: fp.version, record_start: fp.record_start, network: NETWORK, revision: REVISION });
+logEvent(db, "engine", "info", "engine start", undefined, { rules: fp.sha256, network: NETWORK, revision: REVISION });
 
 let crowd: CrowdVersion | undefined = loadLatestCrowds(db);
 let running = false;
@@ -29,11 +39,12 @@ async function ensureCrowds(): Promise<void> {
   const ageH = crowd ? (Date.now() - crowd.pulledAt) / 3_600_000 : Infinity;
   if (ageH < rules.crowd_refresh_every_hours) return;
   const t = Date.now();
-  crowd = await buildCrowds(db, rules, loaded.sha256);
+  crowd = await buildCrowds(db, rules, loaded.sha256, RAW_DIR, NETWORK);
   log("crowds built", {
     id: crowd.id,
     copy: crowd.members.filter((m) => m.crowd === "copy").length,
     fade: crowd.members.filter((m) => m.crowd === "fade").length,
+    disabledCoins: crowd.disabledCoins,
     ms: Date.now() - t,
   });
 }
@@ -48,8 +59,9 @@ async function cycle(): Promise<void> {
     await ensureCrowds();
     const periodMs = rules.snapshot_every_minutes * 60_000;
     const deadline = Date.now() + periodMs - 30_000;
-    const r = await takeSnapshot(db, rules, crowd!, RAW_DIR, deadline);
-    log("snapshot", r);
+    const r = await takeSnapshot(db, rules, crowd!, RAW_DIR, deadline, NETWORK);
+    const rec = rebuildRecords(db, rules, recordStartMs, NETWORK);
+    log("snapshot", { ...r, recordSnapshots: rec.snapshots });
   } catch (e) {
     log("cycle failed", { error: (e as Error).message });
     logEvent(db, "engine", "error", (e as Error).message, (e as { code?: string }).code ?? "E-CYCLE");
@@ -58,6 +70,7 @@ async function cycle(): Promise<void> {
   }
 }
 
+/** Snapshots run only on the 5-minute grid, including after a restart. */
 function scheduleAligned(): void {
   const period = rules.snapshot_every_minutes * 60_000;
   const wait = period - (Date.now() % period);
@@ -67,7 +80,12 @@ function scheduleAligned(): void {
   }, wait);
 }
 
-await cycle();
+try {
+  await ensureCrowds();
+} catch (e) {
+  log("crowd refresh failed", { error: (e as Error).message });
+}
+rebuildRecords(db, rules, recordStartMs, NETWORK);
 scheduleAligned();
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {

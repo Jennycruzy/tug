@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
-import type { Rules } from "@tug/core";
-import { discoverPage, type DiscoverItem } from "@tug/strike";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { gzipSync } from "node:zlib";
+import { HL_DEXES, allMappedMarkets, checkMapping, type MappingCheck, type Rules } from "@tug/core";
+import { allMids } from "@tug/hl";
+import { discoverPage, markets as strikeMarkets, type DiscoverItem } from "@tug/strike";
 import { logEvent, type Db } from "./db.js";
 
 export interface Member {
@@ -18,6 +22,35 @@ export interface CrowdVersion {
   id: number;
   pulledAt: number;
   members: Member[];
+  /** Hyperliquid coins whose mapping failed its price check at this refresh; skipped until the next. */
+  disabledCoins: string[];
+}
+
+export interface MappingResult {
+  checks: MappingCheck[];
+  disabledCoins: string[];
+  uncoveredStrikeMarkets: string[];
+}
+
+/**
+ * Mapping checks run at every crowd refresh: (1) price match of every row against Strike's mark,
+ * (2) every Strike market that Strike's own `top_assets` maps a Hyperliquid asset to is covered.
+ */
+export async function checkMappingLive(items: DiscoverItem[]): Promise<MappingResult> {
+  const mids: Record<string, number> = {};
+  for (const dex of HL_DEXES) Object.assign(mids, await allMids(dex));
+  const { markets } = await strikeMarkets();
+  const marks: Record<string, number> = {};
+  for (const [sym, m] of Object.entries(markets)) if (m.mark_price) marks[sym] = m.mark_price;
+  const checks = checkMapping(mids, marks);
+  const covered = new Set(allMappedMarkets());
+  const strikeMapped = new Set<string>();
+  for (const it of items) for (const a of it.top_assets ?? []) if (a.symbol) strikeMapped.add(a.symbol);
+  return {
+    checks,
+    disabledCoins: checks.filter((c) => !c.ok).map((c) => c.coin),
+    uncoveredStrikeMarkets: [...strikeMapped].filter((s) => !covered.has(s)).sort(),
+  };
 }
 
 const PLATFORMS = ["hyperliquid", "strike"] as const;
@@ -38,8 +71,15 @@ function eligible(i: DiscoverItem, rules: Rules): boolean {
  * Fade picks: walk each platform by 30-day PnL, lowest first, until PnL turns positive
  * (Strike tags "counter" only among losing traders; observed 2026-10-22).
  */
-export async function buildCrowds(db: Db, rules: Rules, rulesSha: string): Promise<CrowdVersion> {
+export async function buildCrowds(
+  db: Db,
+  rules: Rules,
+  rulesSha: string,
+  rawDir: string,
+  network: string,
+): Promise<CrowdVersion> {
   const raws: string[] = [];
+  const allItems: DiscoverItem[] = [];
   let pages = 0;
   const copy = new Map<string, DiscoverItem>();
   const fade = new Map<string, DiscoverItem>();
@@ -49,6 +89,7 @@ export async function buildCrowds(db: Db, rules: Rules, rulesSha: string): Promi
     for (;;) {
       const page = await discoverPage({ platform, sort: "copy_score", order: "desc", cursor });
       raws.push(page.raw);
+      allItems.push(...page.items);
       pages++;
       let below = false;
       for (const it of page.items) {
@@ -66,6 +107,7 @@ export async function buildCrowds(db: Db, rules: Rules, rulesSha: string): Promi
     for (;;) {
       const page = await discoverPage({ platform, sort: "pnl_30d", order: "asc", cursor });
       raws.push(page.raw);
+      allItems.push(...page.items);
       pages++;
       let positive = false;
       for (const it of page.items) {
@@ -107,15 +149,17 @@ export async function buildCrowds(db: Db, rules: Rules, rulesSha: string): Promi
   const memberHash = createHash("sha256")
     .update(members.map((m) => `${m.crowd}:${m.platform}:${m.memberId}`).sort().join("\n"))
     .digest("hex");
-  const rawSha = createHash("sha256").update(raws.join("\n")).digest("hex");
+  const rawText = raws.join("\n");
+  const rawSha = createHash("sha256").update(rawText).digest("hex");
   const pulledAt = Date.now();
+  const mapping = await checkMappingLive(allItems);
 
   const id = db.transaction(() => {
     const info = db
       .prepare(
-        "INSERT INTO crowd_versions (pulled_at, rules_sha256, copy_count, fade_count, member_hash, raw_sha256, pages) VALUES (?,?,?,?,?,?,?)",
+        "INSERT INTO crowd_versions (pulled_at, rules_sha256, copy_count, fade_count, member_hash, raw_sha256, pages, network, mapping_json) VALUES (?,?,?,?,?,?,?,?,?)",
       )
-      .run(pulledAt, rulesSha, copyMembers.length, fadeMembers.length, memberHash, rawSha, pages);
+      .run(pulledAt, rulesSha, copyMembers.length, fadeMembers.length, memberHash, rawSha, pages, network, JSON.stringify(mapping));
     const vid = Number(info.lastInsertRowid);
     const ins = db.prepare(
       "INSERT INTO crowd_members (version_id, platform, member_id, crowd, copy_score, style, account_value, pnl_30d, raw_json) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -126,6 +170,14 @@ export async function buildCrowds(db: Db, rules: Rules, rulesSha: string): Promi
     return vid;
   })();
 
+  mkdirSync(rawDir, { recursive: true });
+  writeFileSync(join(rawDir, `crowds-${id}.txt.gz`), gzipSync(rawText));
+  for (const c of mapping.checks.filter((x) => !x.ok)) {
+    logEvent(db, "crowds", "warn", "A market's mapping failed its price check.", "E-MAP", c);
+  }
+  if (mapping.uncoveredStrikeMarkets.length) {
+    logEvent(db, "crowds", "warn", "Strike maps assets to markets TUG does not cover.", "E-MAP", mapping.uncoveredStrikeMarkets);
+  }
   logEvent(db, "crowds", "info", "crowds built", undefined, {
     id,
     pages,
@@ -134,12 +186,12 @@ export async function buildCrowds(db: Db, rules: Rules, rulesSha: string): Promi
     copyStrike: copyMembers.filter((m) => m.platform === "strike").length,
     fadeStrike: fadeMembers.filter((m) => m.platform === "strike").length,
   });
-  return { id, pulledAt, members };
+  return { id, pulledAt, members, disabledCoins: mapping.disabledCoins };
 }
 
 export function loadLatestCrowds(db: Db): CrowdVersion | undefined {
-  const v = db.prepare("SELECT id, pulled_at FROM crowd_versions ORDER BY id DESC LIMIT 1").get() as
-    | { id: number; pulled_at: number }
+  const v = db.prepare("SELECT id, pulled_at, mapping_json FROM crowd_versions ORDER BY id DESC LIMIT 1").get() as
+    | { id: number; pulled_at: number; mapping_json: string | null }
     | undefined;
   if (!v) return undefined;
   const rows = db
@@ -154,9 +206,11 @@ export function loadLatestCrowds(db: Db): CrowdVersion | undefined {
     pnl_30d: number | null;
     raw_json: string;
   }>;
+  const disabledCoins = v.mapping_json ? (JSON.parse(v.mapping_json) as MappingResult).disabledCoins : [];
   return {
     id: v.id,
     pulledAt: v.pulled_at,
+    disabledCoins,
     members: rows.map((r) => ({
       platform: r.platform,
       memberId: r.member_id,

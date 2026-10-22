@@ -9,7 +9,7 @@ jobs:
         env:
           WORDS_PRIVATE: ${{ secrets.WORDS_PRIVATE }}
         run: |
-          words='milestone|gate|checkpoint|spec|codex|claude|auditor|breaker|a-item|u-item|TODO|FIXME|mock|stub|fake'
+          words='milestone|gate|checkpoint|audit|spec|codex|claude|auditor|breaker|a-item|u-item|TODO|FIXME|mock|stub|fake|G[0-9]'
           if [ -n "$WORDS_PRIVATE" ]; then words="$words|$WORDS_PRIVATE"; fi
           hits=$(git ls-files -z | grep -zv -E '^(pnpm-lock.yaml|\.github/workflows/words.yml)$' | xargs -0 grep -n -i -w -E "($words)" | grep -v -F -f .github/words-allow.txt || true)
           if [ -n "$hits" ]; then echo "$hits"; exit 1; fi

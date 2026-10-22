@@ -16,6 +16,21 @@ export interface FetchJsonOptions {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+export interface HttpEvent {
+  code: "E-RATE";
+  host: string;
+  status: number | null;
+  attempt: number;
+  waitMs: number;
+  message: string;
+}
+
+let sink: (e: HttpEvent) => void = () => {};
+/** Every 429/5xx/network failure and the backoff that follows is reported here. */
+export function setHttpEventSink(fn: (e: HttpEvent) => void): void {
+  sink = fn;
+}
+
 /**
  * JSON over HTTP with pacing and exponential backoff. Returns the parsed body and the raw text
  * (the raw text is hashed into the evidence record).
@@ -24,7 +39,9 @@ export async function fetchJson(url: string, o: FetchJsonOptions): Promise<{ jso
   const attempts = o.attempts ?? 4;
   let delay = 1_000;
   let lastErr: unknown;
+  const host = new URL(url).host;
   for (let i = 0; i < attempts; i++) {
+    let status: number | null = null;
     await o.bucket.take(o.weight);
     try {
       const res = await fetch(url, {
@@ -38,6 +55,7 @@ export async function fetchJson(url: string, o: FetchJsonOptions): Promise<{ jso
         body: o.body !== undefined ? JSON.stringify(o.body) : undefined,
         signal: AbortSignal.timeout(o.timeoutMs ?? 20_000),
       });
+      status = res.status;
       const raw = await res.text();
       if (res.status === 429 || res.status >= 500) {
         lastErr = new TugError("E-RATE", `${res.status} from ${new URL(url).host}`);
@@ -50,7 +68,9 @@ export async function fetchJson(url: string, o: FetchJsonOptions): Promise<{ jso
       if (e instanceof TugError && e.code === "E-HTTP") throw e;
       lastErr = e;
     }
-    await sleep(delay + Math.floor(Math.random() * 250));
+    const waitMs = delay + Math.floor(Math.random() * 250);
+    sink({ code: "E-RATE", host, status, attempt: i + 1, waitMs, message: lastErr instanceof Error ? lastErr.message : String(lastErr) });
+    await sleep(waitMs);
     delay = Math.min(delay * 2, 60_000);
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));

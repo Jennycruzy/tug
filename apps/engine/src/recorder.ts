@@ -49,10 +49,11 @@ export async function takeSnapshot(
   crowd: CrowdVersion,
   rawDir: string,
   deadlineMs: number,
+  network: string,
 ): Promise<SnapshotResult> {
   const started = Date.now();
   const snapId = Number(
-    db.prepare("INSERT INTO snapshots (crowd_version, started_at, status) VALUES (?,?,'RUNNING')").run(crowd.id, started)
+    db.prepare("INSERT INTO snapshots (crowd_version, started_at, status, network) VALUES (?,?,'RUNNING',?)").run(crowd.id, started, network)
       .lastInsertRowid,
   );
 
@@ -63,6 +64,8 @@ export async function takeSnapshot(
   const rows: PositionRow[] = [];
   const raws: string[] = [];
   const read = { copy: 0, fade: 0 };
+  const acct = new Map<string, number>();
+  const disabled = new Set(crowd.disabledCoins);
   let errors = 0;
 
   const readMember = async (m: Member) => {
@@ -74,8 +77,9 @@ export async function takeSnapshot(
           raws.push(`${m.memberId}|${dex}|${s.raw}`);
           for (const p of s.positions) {
             const symbol = strikeMarketForHlCoin(p.coin);
-            if (!symbol || p.size === 0) continue;
+            if (!symbol || p.size === 0 || disabled.has(p.coin)) continue;
             rows.push({ memberId: `hl:${m.memberId}`, crowd: m.crowd, symbol, signedNotional: Math.sign(p.size) * p.value });
+            acct.set(`hl:${m.memberId}`, m.accountValue);
           }
         }
       } else {
@@ -85,6 +89,7 @@ export async function takeSnapshot(
           const mark = marks[p.symbol];
           if (!mark || p.size === 0) continue;
           rows.push({ memberId: `strike:${m.memberId}`, crowd: m.crowd, symbol: p.symbol, signedNotional: p.size * mark });
+          acct.set(`strike:${m.memberId}`, m.accountValue);
         }
       }
       read[m.crowd]++;
@@ -113,11 +118,11 @@ export async function takeSnapshot(
 
   db.transaction(() => {
     const insPos = db.prepare(
-      "INSERT INTO positions (snapshot_id, platform, member_id, crowd, symbol, signed_notional) VALUES (?,?,?,?,?,?)",
+      "INSERT INTO positions (snapshot_id, platform, member_id, crowd, symbol, signed_notional, account_value) VALUES (?,?,?,?,?,?,?)",
     );
     for (const r of rows) {
       const [platform, ...rest] = r.memberId.split(":");
-      insPos.run(snapId, platform === "hl" ? "hyperliquid" : "strike", rest.join(":"), r.crowd, r.symbol, r.signedNotional);
+      insPos.run(snapId, platform === "hl" ? "hyperliquid" : "strike", rest.join(":"), r.crowd, r.symbol, r.signedNotional, acct.get(r.memberId) ?? null);
     }
     const insMark = db.prepare("INSERT INTO marks (snapshot_id, symbol, mark, funding_rate) VALUES (?,?,?,?)");
     for (const [sym, m] of Object.entries(markets)) {

@@ -1,1 +1,1 @@
-{ "server": "https://api.strikefinance.org", "request": "GET /v2/markets", "captured_at": "2026-10-22T09:2xZ", "note": "unmodified reply" }
+{ "server": "https://api.strikefinance.org", "request": "GET /v2/markets", "captured_at": "2026-10-22T09:28:42Z", "note": "unmodified reply; captured_at is the file write time" }

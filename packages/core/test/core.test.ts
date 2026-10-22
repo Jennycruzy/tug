@@ -38,7 +38,8 @@ describe("mapping", () => {
     expect(strikeMarketForHlCoin("xyz:GOLD")).toBe("XAU-USD");
     expect(strikeMarketForHlCoin("xyz:SILVER")).toBe("XAG-USD");
     expect(strikeMarketForHlCoin("xyz:XYZ100")).toBe("NAS100-USD");
-    expect(strikeMarketForHlCoin("cash:WTI")).toBe("WTI-USD");
+    expect(strikeMarketForHlCoin("xyz:CL")).toBe("WTI-USD");
+    expect(strikeMarketForHlCoin("cash:WTI")).toBeUndefined();
   });
   it("T-MAP-2 main-exchange coins map by name; unknown coins are ignored", () => {
     expect(strikeMarketForHlCoin("ETH")).toBe("ETH-USD");
@@ -55,6 +56,8 @@ describe("mapping", () => {
     expect(res.find((r) => r.coin === "xyz:SKHX")!.ok).toBe(true);
     const bad = checkMapping({ "xyz:SKHX": 137.5 }, { "SKHYNIX-USD": 932.0 });
     expect(bad.find((r) => r.coin === "xyz:SKHX")!.ok).toBe(false);
+    const wti = checkMapping({ "xyz:CL": 99.416 }, { "WTI-USD": 99.467 });
+    expect(wti.find((r) => r.coin === "xyz:CL")!.ok).toBe(true);
   });
 });
 
