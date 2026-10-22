@@ -40,6 +40,8 @@ describe("mapping", () => {
     expect(strikeMarketForHlCoin("xyz:XYZ100")).toBe("NAS100-USD");
     expect(strikeMarketForHlCoin("xyz:CL")).toBe("WTI-USD");
     expect(strikeMarketForHlCoin("cash:WTI")).toBeUndefined();
+    expect(strikeMarketForHlCoin("io:SNDK")).toBe("SNDK-USD");
+    expect(strikeMarketForHlCoin("io:DRAM")).toBe("DRAM-USD");
   });
   it("T-MAP-2 main-exchange coins map by name; unknown coins are ignored", () => {
     expect(strikeMarketForHlCoin("ETH")).toBe("ETH-USD");

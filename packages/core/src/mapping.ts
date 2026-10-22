@@ -4,7 +4,7 @@
  * Names that differ were matched by price on 2026-10-22 (SKHX ≈ SKHYNIX, GOLD ≈ XAU, CL ≈ WTI ...).
  * `cash:WTI` is a different contract (69.4 vs Strike WTI 99.5 on 2026-10-22) and is not used.
  */
-export const HL_DEXES = ["", "xyz"] as const;
+export const HL_DEXES = ["", "xyz", "io"] as const;
 export type HlDex = (typeof HL_DEXES)[number];
 
 const MAIN = ["ADA", "BNB", "BTC", "DOGE", "ETH", "HYPE", "NEAR", "PUMP", "SOL", "XRP", "ZEC"];
@@ -24,6 +24,9 @@ const TABLE = new Map<string, string>();
 for (const c of MAIN) TABLE.set(c, `${c}-USD`);
 for (const c of XYZ_SAME) TABLE.set(`xyz:${c}`, `${c}-USD`);
 for (const [c, s] of Object.entries(XYZ_RENAMED)) TABLE.set(`xyz:${c}`, `${s}-USD`);
+// The `io` exchange held 13.5% of the crowds' SNDK exposure on 2026-10-22 (above the 10% rule); price-matched.
+TABLE.set("io:SNDK", "SNDK-USD");
+TABLE.set("io:DRAM", "DRAM-USD");
 
 /** Markets with no Hyperliquid source; their crowds come from Strike traders only. */
 export const STRIKE_ONLY_MARKETS = ["NIGHT-USD"];
