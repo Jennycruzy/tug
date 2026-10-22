@@ -69,3 +69,33 @@ describe("account status from Strike fills", () => {
     for (const t of ["if_transfer", "vault_withdrawal", "slp_transfer"]) expect(accountStatusFrom([{ auto_close_type: t }])).toBe("trading");
   });
 });
+
+describe("risk exits log their own reason", () => {
+  it("a margin reduce logs E-MARGIN, a stop E-STOP, a manual close E-EXIT; each is read back", async () => {
+    const db = openDb(":memory:");
+    const ex = new Executor(db, new StrikeSigned(SECRET, "https://example.invalid"), "testnet", { trading: true, killFile: "/nonexistent/kill", pollMs: 1 });
+    const real = globalThis.fetch;
+    const sent: Array<{ method: string; body: Record<string, unknown> | null }> = [];
+    globalThis.fetch = (async (url: string, init: RequestInit) => {
+      const method = init.method ?? "GET";
+      sent.push({ method, body: init.body ? JSON.parse(String(init.body)) : null });
+      const r = method === "POST" ? R.order_accepted : url.includes("/v2/positions") ? R.positions_one : R.order_open;
+      return new Response(r!.raw, { status: r!.status });
+    }) as typeof fetch;
+    try {
+      await ex.riskExit("ETH-USD", "tug-v1-testnet-1-reduce", "margin", "0.010", "E-MARGIN");
+      await ex.riskExit("ETH-USD", "tug-v1-testnet-2-stop", "stop");
+      await ex.riskExit("ETH-USD", "tug-v1-testnet-3-manual", "cleanup", undefined, "E-EXIT");
+    } finally {
+      globalThis.fetch = real;
+    }
+    const codes = (db.prepare("SELECT code FROM events WHERE component='executor' ORDER BY rowid").all() as Array<{ code: string }>).map((r) => r.code);
+    expect(codes).toEqual(["E-MARGIN", "E-STOP", "E-EXIT"]);
+    const posts = sent.filter((s) => s.method === "POST").map((s) => s.body!);
+    expect(posts[0]).toMatchObject({ type: "market", reduce_only: true, size: "0.010" });
+    expect(posts[0]!.close_position).toBeUndefined();
+    expect(posts[1]).toMatchObject({ type: "market", reduce_only: true, close_position: true });
+    const rows = (db.prepare("SELECT status FROM orders ORDER BY placed_at").all() as Array<{ status: string }>).map((r) => r.status);
+    expect(rows.every((s) => s !== "pending" && s !== "sent")).toBe(true);
+  });
+});

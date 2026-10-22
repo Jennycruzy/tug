@@ -1,5 +1,5 @@
 {
- "note": "real Strike testnet replies, unmodified, from the stored call log of the exec check 2026-10-22T21:37Z; open_orders_empty from the kill-switch run kill-testnet-2026-10-22T15-50-44-431Z.json",
+ "note": "real Strike testnet replies, unmodified, from the stored call log of the exec check 2026-10-22T21:37Z; open_orders_empty from the kill-switch run kill-testnet-2026-10-22T15-50-44-431Z.json; positions_one from the stored call log (testnet risk checks)",
  "replies": {
   "order_open": {
    "server": "https://api-v2-testnet.strikefinance.org",
@@ -28,6 +28,13 @@
    "request": "GET /v2/order?symbol=NOPE-USD&client_order_id=tug-probe-badsymbol-1792693829295",
    "status": 404,
    "raw": "{\"error\":\"order not found\"}"
+  },
+  "positions_one": {
+   "server": "https://api-v2-testnet.strikefinance.org",
+   "captured_at": "2026-10-22T21:39:45.298Z",
+   "request": "GET /v2/positions",
+   "status": 200,
+   "raw": "{\"count\":1,\"positions\":[{\"id\":3738,\"account_id\":\"01a163bf-fb0a-77b0-86c0-03a62889ee01\",\"margin_mode\":\"cross\",\"leverage\":5,\"size\":\"0.02\",\"entry_price\":\"2384.51\",\"iso_balance\":\"0\",\"accumulated_funding_fees\":\"0\",\"create_timestamp\":1792705156642,\"update_timestamp\":1792705156642,\"symbol\":\"ETH-USD\",\"upnl\":\"0.13672296\",\"maintenance_margin\":\"1.91307692\",\"bankruptcy_price\":\"0\",\"liquidation_price\":\"0\"}]}"
   }
  }
 }

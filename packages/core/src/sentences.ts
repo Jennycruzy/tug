@@ -29,6 +29,7 @@ export const PUBLIC_SENTENCES: Record<string, string> = {
   "E-KILL-LEFT": "The kill switch ran but orders were still open afterwards.",
   "E-TRADING-OFF": "Trading is off; no order was placed.",
   "E-KEY": "An account key is missing; nothing was signed.",
+  "E-EXIT": "A position was closed by hand with a reduce-only order.",
   "E-STOP-OPEN": "A position could not be confirmed closed after a stop; closing is retried and the owner is alerted.",
   "E-WS": "The account's live connection to Strike dropped; it reconnects and re-reads the account.",
 };

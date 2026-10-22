@@ -38,20 +38,20 @@ const HALTED = new Set(["liquidation", "circuit_breaker", "halted"]);
  */
 export function riskCheck(s: RiskState, rules: Rules): RiskAction[] {
   const out: RiskAction[] = [];
-  if (!s.tradingOn) return [{ kind: "cancel_all", code: "E-KILLED" }, { kind: "no_new_orders", code: "E-KILLED" }];
-  if (s.paused) {
-    // Paused by a stop: keep closing until Strike reports no position (an exit can be refused after its 201).
-    const open = Object.values(s.positions).some((v) => v !== 0);
-    return [{ kind: "cancel_all", code: "E-STOP" }, ...(open ? [{ kind: "flatten_all", code: "E-STOP" } as const] : []), { kind: "no_new_orders", code: "E-STOP" }];
-  }
-
-  if (s.equity < (1 - rules.drawdown_stop_fraction) * s.startEquity) {
+  // The equity stop and its flattening come first: the kill switch blocks new orders, never a stop's close.
+  if (!s.paused && s.equity < (1 - rules.drawdown_stop_fraction) * s.startEquity) {
     return [
       { kind: "cancel_all", code: "E-STOP" },
       { kind: "flatten_all", code: "E-STOP" },
       { kind: "pause", code: "E-STOP" },
     ];
   }
+  if (s.paused) {
+    // Paused by a stop: keep closing until Strike reports no position (an exit can be refused after its 201).
+    const open = Object.values(s.positions).some((v) => v !== 0);
+    return [{ kind: "cancel_all", code: "E-STOP" }, ...(open ? [{ kind: "flatten_all", code: "E-STOP" } as const] : []), { kind: "no_new_orders", code: "E-STOP" }];
+  }
+  if (!s.tradingOn) return [{ kind: "cancel_all", code: "E-KILLED" }, { kind: "no_new_orders", code: "E-KILLED" }];
 
   const halted = HALTED.has(s.accountStatus) || Object.values(s.marketStatus).some((m) => HALTED.has(m));
   if (halted) out.push({ kind: "no_new_orders", code: "E-HALT" });

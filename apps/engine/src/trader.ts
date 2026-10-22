@@ -38,6 +38,7 @@ export class Trader {
   private stream: UserStream | undefined;
   private accountStatus = "trading";
   private flattenTries = 0;
+  private riskBusy = false;
   private timers: NodeJS.Timeout[] = [];
 
   constructor(
@@ -99,6 +100,17 @@ export class Trader {
 
   /** The risk guard: decide from live state, then carry the actions out in order. */
   async riskTick(): Promise<void> {
+    // One risk tick at a time: a slow exit read-back must not overlap the next tick.
+    if (this.riskBusy) return;
+    this.riskBusy = true;
+    try {
+      await this.riskTickOnce();
+    } finally {
+      this.riskBusy = false;
+    }
+  }
+
+  private async riskTickOnce(): Promise<void> {
     const acct = await this.ex.account();
     const pos = await this.ex.positions();
     const now = Date.now();
@@ -141,7 +153,7 @@ export class Trader {
       }
     } else if (a.kind === "flatten_all") {
       this.flattenTries++;
-      for (const s of Object.keys(pos)) await this.ex.riskExit(s, this.clientId(`stop-${s}`), a.code);
+      for (const s of Object.keys(pos)) await this.ex.riskExit(s, this.clientId(`stop-${s}`), a.code, undefined, a.code);
       const left = await this.ex.positions();
       if (Object.keys(left).length > 0 && this.flattenTries >= 2) {
         logEvent(this.db, "risk", "error", "positions still open after two closing attempts", "E-STOP-OPEN", { positions: left, tries: this.flattenTries });
@@ -152,7 +164,7 @@ export class Trader {
     } else if (a.kind === "reduce_half") {
       const p = pos[a.symbol];
       const step = this.marketsCache?.rules[a.symbol]?.step;
-      if (p && step) await this.ex.riskExit(a.symbol, this.clientId(`reduce-${a.symbol}`), a.code, toStep(Math.abs(Number(p.size)) / 2, step, "down"));
+      if (p && step) await this.ex.riskExit(a.symbol, this.clientId(`reduce-${a.symbol}`), a.code, toStep(Math.abs(Number(p.size)) / 2, step, "down"), a.code);
     } else if (a.kind === "no_new_orders" && a.code !== "E-KILLED" && a.code !== "E-STOP") {
       logEvent(this.db, "risk", "warn", `new orders held: ${a.code}`, a.code);
     }
@@ -275,8 +287,13 @@ export class Trader {
     const ins = this.db.prepare(
       "INSERT OR IGNORE INTO fills (network, fill_id, trade_id, order_id, client_order_id, symbol, side, role, price, size, fee, realized_pnl, ts, raw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     );
+    const setFilled = this.db.prepare(
+      "UPDATE orders SET status=CASE WHEN (SELECT COALESCE(SUM(size),0) FROM fills WHERE network=? AND client_order_id=?) >= CAST(size AS REAL) - 1e-12 THEN 'filled' ELSE 'partially_filled' END, updated_at=? WHERE client_order_id=? AND status NOT IN ('filled','canceled','rejected')",
+    );
     for (const f of fills) {
       ins.run(this.cfg.network, f.id, f.trade_id, f.order_id, f.client_order_id ?? null, f.symbol, f.side, f.role, Number(f.price), Number(f.size), Number(f.fee), Number(f.realized_pnl ?? 0), f.timestamp, JSON.stringify(f));
+      // Order rows follow the fills too, also for fills that arrived while no stream was open.
+      if (f.client_order_id) setFilled.run(this.cfg.network, f.client_order_id, Date.now(), f.client_order_id);
     }
   }
 }

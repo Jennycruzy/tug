@@ -56,6 +56,17 @@ describe("risk guard", () => {
   });
 });
 
+describe("kill switch and stop together", () => {
+  it("a stop that falls while the kill switch is on still closes the positions and pauses", () => {
+    expect(riskCheck({ ...base, tradingOn: false, equity: 14 }, rules)).toEqual([
+      { kind: "cancel_all", code: "E-STOP" },
+      { kind: "flatten_all", code: "E-STOP" },
+      { kind: "pause", code: "E-STOP" },
+    ]);
+    expect(riskCheck({ ...base, tradingOn: false, paused: true }, rules).map((a) => a.kind)).toEqual(["cancel_all", "flatten_all", "no_new_orders"]);
+  });
+});
+
 describe("stale data", () => {
   it("T-STALE-1 no complete snapshot for over 15 minutes cancels resting orders and holds positions", () => {
     const a = riskCheck({ ...base, lastSnapshotAt: NOW - 15 * 60_000 - 1 }, rules);

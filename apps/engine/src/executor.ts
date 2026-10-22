@@ -134,7 +134,8 @@ export class Executor {
     return (await this.call("GET", path)).json;
   }
 
-  async riskExit(symbol: string, clientOrderId: string, reason: string, size?: string): Promise<unknown> {
+  /** `code` is the reason's own event code: E-STOP (equity stop), E-MARGIN (margin reduce) or E-EXIT (manual). */
+  async riskExit(symbol: string, clientOrderId: string, reason: string, size?: string, code = "E-STOP"): Promise<unknown> {
     this.db
       .prepare(
         "INSERT INTO orders (client_order_id, network, symbol, side, price, size, post_only, reason, status, placed_at, updated_at) VALUES (?,?,?,?,?,?,0,?,'sent',?,?)",
@@ -158,7 +159,7 @@ export class Executor {
       client_order_id: clientOrderId,
     });
     this.setStatus(clientOrderId, "pending");
-    logEvent(this.db, "executor", "warn", `risk exit ${symbol}: ${reason}`, "E-STOP", { symbol, side, size: held.size });
+    logEvent(this.db, "executor", "warn", `risk exit ${symbol}: ${reason}`, code, { symbol, side, size: size ?? held.size });
     // Strike answers 201 to every well-formed order and decides later: read the exit back to its final status.
     const path = `/v2/order?symbol=${encodeURIComponent(symbol)}&client_order_id=${encodeURIComponent(clientOrderId)}`;
     for (let i = 0; i < 10; i++) {
