@@ -90,10 +90,11 @@ export class Executor {
     for (let i = 0; i < 10; i++) {
       await sleep(this.opts.pollMs ?? 3_000);
       const r = await this.client.call("GET", path);
+      // Every read is stored, the 404s of an order that never appeared included.
+      this.db
+        .prepare("INSERT INTO strike_calls (network, ts, method, path, body, status, reply) VALUES (?,?,'GET',?,NULL,?,?)")
+        .run(this.network, r.at, path, r.status, r.raw);
       if (r.status === 200) {
-        this.db
-          .prepare("INSERT INTO strike_calls (network, ts, method, path, body, status, reply) VALUES (?,?,'GET',?,NULL,?,?)")
-          .run(this.network, r.at, path, r.status, r.raw);
         const order = (r.json as { ID?: number; Status?: string }) ?? {};
         if (order.ID && order.Status) {
           this.setStatus(o.clientOrderId, order.Status, order.ID);
@@ -158,7 +159,23 @@ export class Executor {
     });
     this.setStatus(clientOrderId, "pending");
     logEvent(this.db, "executor", "warn", `risk exit ${symbol}: ${reason}`, "E-STOP", { symbol, side, size: held.size });
-    return r.json;
+    // Strike answers 201 to every well-formed order and decides later: read the exit back to its final status.
+    const path = `/v2/order?symbol=${encodeURIComponent(symbol)}&client_order_id=${encodeURIComponent(clientOrderId)}`;
+    for (let i = 0; i < 10; i++) {
+      await sleep(this.opts.pollMs ?? 3_000);
+      const back = await this.client.call("GET", path);
+      this.db
+        .prepare("INSERT INTO strike_calls (network, ts, method, path, body, status, reply) VALUES (?,?,'GET',?,NULL,?,?)")
+        .run(this.network, back.at, path, back.status, back.raw);
+      const o = (back.status === 200 ? back.json : {}) as { ID?: number; Status?: string };
+      if (o.ID && o.Status && o.Status !== "pending") {
+        this.setStatus(clientOrderId, o.Status, o.ID);
+        return { reply: r.json, final: o };
+      }
+    }
+    this.setStatus(clientOrderId, "unconfirmed");
+    logEvent(this.db, "executor", "error", `risk exit ${symbol} not confirmed by Strike within 30 s`, "E-STOP-OPEN", { symbol, clientOrderId });
+    return { reply: r.json, final: null };
   }
 
   async openOrders(symbol: string): Promise<OpenOrder[]> {

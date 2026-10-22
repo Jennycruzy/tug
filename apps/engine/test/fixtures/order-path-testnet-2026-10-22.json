@@ -1,0 +1,33 @@
+{
+ "note": "real Strike testnet replies, unmodified, from the stored call log of the exec check 2026-10-22T21:37Z; open_orders_empty from the kill-switch run kill-testnet-2026-10-22T15-50-44-431Z.json",
+ "replies": {
+  "order_open": {
+   "server": "https://api-v2-testnet.strikefinance.org",
+   "captured_at": "2026-10-22T21:37:03.726000Z",
+   "request": "GET /v2/order?symbol=ETH-USD&client_order_id=tug-v1-testnet-1792705020283-0-ETH-USD-1",
+   "status": 200,
+   "raw": "{\"ID\":243146308,\"ClientOrderID\":\"tug-v1-testnet-1792705020283-0-ETH-USD-1\",\"AccountID\":\"01a163bf-fb0a-77b0-86c0-03a62889ee01\",\"Symbol\":\"ETH-USD\",\"CloseReason\":\"\",\"Side\":\"buy\",\"Status\":\"open\",\"Type\":\"limit\",\"OriginType\":\"\",\"AutoCloseType\":\"\",\"TimeInForce\":\"GTC\",\"WorkingType\":\"none\",\"Size\":\"0.006\",\"Filled\":\"0\",\"Price\":\"2394.04\",\"StopPrice\":\"0\",\"BoundPrice\":\"0\",\"PostOnly\":true,\"ReduceOnly\":false,\"ClosePosition\":false,\"PriceProtect\":false,\"CreateTimestamp\":1792705020547,\"EntryTimestamp\":1792705020548,\"EventTimestamp\":1792705020548}"
+  },
+  "open_orders_empty": {
+   "server": "https://api-v2-testnet.strikefinance.org",
+   "captured_at": 1792684240823,
+   "request": "GET /v2/openOrders?symbol=ADA-USD",
+   "status": 200,
+   "raw": "{\"count\":0,\"orders\":[]}"
+  },
+  "order_accepted": {
+   "server": "https://api-v2-testnet.strikefinance.org",
+   "captured_at": "2026-10-22T21:36:57.087000Z",
+   "request": "POST /v2/order",
+   "status": 201,
+   "raw": "{\"client_order_id\":\"tug-v1-testnet-1792705016971-0-ETH-USD-0\",\"account_id\":\"01a163bf-fb0a-77b0-86c0-03a62889ee01\",\"symbol\":\"ETH-USD\",\"status\":\"pending\",\"sequence_id\":94004355,\"message_id\":\"1792705017032-0\"}"
+  },
+  "order_not_found": {
+   "server": "https://api-v2-testnet.strikefinance.org",
+   "captured_at": "2026-10-22T18:30:42.074Z",
+   "request": "GET /v2/order?symbol=NOPE-USD&client_order_id=tug-probe-badsymbol-1792693829295",
+   "status": 404,
+   "raw": "{\"error\":\"order not found\"}"
+  }
+ }
+}

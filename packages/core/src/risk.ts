@@ -39,7 +39,11 @@ const HALTED = new Set(["liquidation", "circuit_breaker", "halted"]);
 export function riskCheck(s: RiskState, rules: Rules): RiskAction[] {
   const out: RiskAction[] = [];
   if (!s.tradingOn) return [{ kind: "cancel_all", code: "E-KILLED" }, { kind: "no_new_orders", code: "E-KILLED" }];
-  if (s.paused) return [{ kind: "cancel_all", code: "E-STOP" }, { kind: "no_new_orders", code: "E-STOP" }];
+  if (s.paused) {
+    // Paused by a stop: keep closing until Strike reports no position (an exit can be refused after its 201).
+    const open = Object.values(s.positions).some((v) => v !== 0);
+    return [{ kind: "cancel_all", code: "E-STOP" }, ...(open ? [{ kind: "flatten_all", code: "E-STOP" } as const] : []), { kind: "no_new_orders", code: "E-STOP" }];
+  }
 
   if (s.equity < (1 - rules.drawdown_stop_fraction) * s.startEquity) {
     return [
@@ -63,4 +67,15 @@ export function riskCheck(s: RiskState, rules: Rules): RiskAction[] {
     if (largest) out.push({ kind: "reduce_half", symbol: largest[0], code: "E-MARGIN" });
   }
   return out;
+}
+
+/** Strike's auto-close types that mean the account was liquidated or deleveraged (Strike's fill history docs). */
+export const LIQUIDATION_CLOSE_TYPES = ["liquidation", "adl", "bankrupt"] as const;
+
+/**
+ * The account's status for the risk guard. Strike's /v2/account reply has no status field, so a liquidation
+ * is read from the account's fills: any fill whose auto_close_type is a liquidation type halts new orders.
+ */
+export function accountStatusFrom(fills: Array<{ auto_close_type?: string | null }>): "trading" | "liquidation" {
+  return fills.some((f) => (LIQUIDATION_CLOSE_TYPES as readonly string[]).includes(String(f.auto_close_type ?? ""))) ? "liquidation" : "trading";
 }

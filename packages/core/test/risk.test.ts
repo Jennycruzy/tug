@@ -30,9 +30,14 @@ describe("risk guard", () => {
     ]);
     expect(riskCheck({ ...base, equity: 15 }, rules)).toEqual([]);
   });
-  it("T-RISK-3 once paused, nothing restarts until the owner clears it, even if equity recovers", () => {
+  it("T-RISK-3 once paused, nothing restarts until the owner clears it, even if equity recovers; open positions keep being closed", () => {
+    expect(riskCheck({ ...base, equity: 30, paused: true, positions: {} }, rules)).toEqual([
+      { kind: "cancel_all", code: "E-STOP" },
+      { kind: "no_new_orders", code: "E-STOP" },
+    ]);
     expect(riskCheck({ ...base, equity: 30, paused: true }, rules)).toEqual([
       { kind: "cancel_all", code: "E-STOP" },
+      { kind: "flatten_all", code: "E-STOP" },
       { kind: "no_new_orders", code: "E-STOP" },
     ]);
   });

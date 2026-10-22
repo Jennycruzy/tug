@@ -8,7 +8,8 @@ import { DB_FILE, KILL_FILE, NETWORK, ROOT, RULES_FILE, STATE_DIR, TRADING } fro
 import { logEvent, openDb } from "./db.js";
 import { Executor } from "./executor.js";
 import { Trader } from "./trader.js";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 
 const loaded = loadRules(RULES_FILE);
 assertPublished(loaded, JSON.parse(readFileSync(join(ROOT, "evidence/rules-fingerprints.json"), "utf8")) as Fingerprint[]);
@@ -28,6 +29,22 @@ const trader = new Trader(db, ex, loaded.rules, {
 logEvent(db, "trader", "info", "trader start", undefined, { network: NETWORK, trading: TRADING });
 console.log(JSON.stringify({ t: new Date().toISOString(), msg: "trader start", data: { network: NETWORK, trading: TRADING } }));
 trader.start();
+
+// POST /admin/pause (loopback only, §9.7): turns the kill switch on and cancels every TUG order at once.
+const ADMIN_PORT = Number(process.env.TUG_ADMIN_PORT ?? (NETWORK === "mainnet" ? 8791 : 8792));
+createServer((req, res) => {
+  if (req.method !== "POST" || req.url !== "/admin/pause") {
+    res.writeHead(404).end();
+    return;
+  }
+  const t0 = Date.now();
+  writeFileSync(KILL_FILE, JSON.stringify({ at: new Date().toISOString(), reason: "admin pause" }) + "\n");
+  logEvent(db, "trader", "warn", "admin pause: kill switch on", "E-KILLED");
+  trader
+    .riskTick()
+    .then(() => res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ paused: true, ms: Date.now() - t0 })))
+    .catch((e: Error) => res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ paused: true, error: e.message })));
+}).listen(ADMIN_PORT, "127.0.0.1");
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => {
     trader.stop();

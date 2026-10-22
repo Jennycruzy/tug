@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from "node:fs";
-import { computeTargets, marketRulesFrom, planOrders, riskCheck, toStep, type Holding, type MarketRules, type RiskAction, type Rules } from "@tug/core";
+import { accountStatusFrom, computeTargets, marketRulesFrom, planOrders, riskCheck, toStep, type Holding, type MarketRules, type RiskAction, type Rules } from "@tug/core";
 import { bookTickers, markets as strikeMarkets, UserStream, type StrikeMarket } from "@tug/strike";
 import { logEvent, type Db } from "./db.js";
 import type { Executor } from "./executor.js";
@@ -36,6 +36,8 @@ export class Trader {
   private blocked: RiskAction[] = [];
   private busy = false;
   private stream: UserStream | undefined;
+  private accountStatus = "trading";
+  private flattenTries = 0;
   private timers: NodeJS.Timeout[] = [];
 
   constructor(
@@ -49,6 +51,8 @@ export class Trader {
     this.stream = new UserStream(this.cfg.keyFile, {
       raw: (line, at) => this.db.prepare("INSERT INTO user_frames (network, ts, raw) VALUES (?,?,?)").run(this.cfg.network, at, line),
       frame: (f) => {
+        // A liquidation or auto-deleverage announced on the stream marks the account halted (§9.7).
+        if (f.kind === "event" && /liquidat|adl|bankrupt/i.test(f.type)) this.accountStatus = "liquidation";
         if (f.kind === "order") {
           const o = f.order as { c: string; X: string; i: number };
           this.db.prepare("UPDATE orders SET status=?, order_id=COALESCE(order_id, ?), updated_at=? WHERE client_order_id=?").run(o.X.toLowerCase(), o.i, Date.now(), o.c);
@@ -115,14 +119,16 @@ export class Trader {
         positions,
         lastSnapshotAt: snap.at,
         lastMarksAt: this.lastMarksAt,
-        accountStatus: "trading",
+        // Strike's /v2/account reply carries no status field (decisions.md); liquidation is read from fills and stream events.
+        accountStatus: this.accountStatus,
         marketStatus: Object.fromEntries(Object.keys(positions).map((s) => [s, String((m[s] as { status?: string } | undefined)?.status ?? "trading")])),
-        tradingOn: this.cfg.tradingOn() && !existsSync(this.cfg.pausedFile),
+        tradingOn: this.cfg.tradingOn(),
         paused: existsSync(this.cfg.pausedFile),
       },
       this.rules,
     );
     this.blocked = actions.filter((a) => a.kind === "no_new_orders");
+    if (!actions.some((a) => a.kind === "flatten_all")) this.flattenTries = 0;
     for (const a of actions) await this.act(a, pos);
   }
 
@@ -134,7 +140,12 @@ export class Trader {
         for (const o of open) await this.ex.cancel(s, o.ClientOrderID);
       }
     } else if (a.kind === "flatten_all") {
+      this.flattenTries++;
       for (const s of Object.keys(pos)) await this.ex.riskExit(s, this.clientId(`stop-${s}`), a.code);
+      const left = await this.ex.positions();
+      if (Object.keys(left).length > 0 && this.flattenTries >= 2) {
+        logEvent(this.db, "risk", "error", "positions still open after two closing attempts", "E-STOP-OPEN", { positions: left, tries: this.flattenTries });
+      }
     } else if (a.kind === "pause") {
       writeFileSync(this.cfg.pausedFile, JSON.stringify({ at: new Date().toISOString(), code: a.code }) + "\n");
       logEvent(this.db, "risk", "error", "Equity fell below the stop level: positions closed and trading paused until the owner's go.", "E-STOP");
@@ -180,9 +191,20 @@ export class Trader {
       const plan = planOrders(this.targets, holdings, books, this.marketsCache.rules, this.rules.rebalance_band_fraction);
       const want = new Map(plan.orders.map((o) => [o.symbol, o]));
       const symbols = new Set([...want.keys(), ...Object.keys(this.targets), ...Object.keys(holdings)]);
-      for (const s of symbols) await this.reconcile(s, want.get(s));
+      await this.reconcileAll([...symbols], want);
     } finally {
       this.busy = false;
+    }
+  }
+
+  /** Reconciles every market in turn; one market's failure is recorded and never stops the others. */
+  async reconcileAll(symbols: string[], want: Map<string, { symbol: string; side: "buy" | "sell"; price: string; size: string; why: string }>): Promise<void> {
+    for (const s of symbols) {
+      try {
+        await this.reconcile(s, want.get(s));
+      } catch (e) {
+        this.fail(e);
+      }
     }
   }
 
@@ -191,7 +213,17 @@ export class Trader {
     const mine = (await this.ex.openOrders(symbol)).filter((o) => o.ClientOrderID.startsWith(`tug-v${this.rules.version}-${this.cfg.network}-`));
     const keep = w && mine.find((o) => o.Side.toLowerCase() === w.side && Number(o.Price) === Number(w.price) && Math.abs(Number(o.Size) - Number(o.Filled) - Number(w.size)) < 1e-12);
     for (const o of mine) if (o !== keep) await this.ex.cancel(symbol, o.ClientOrderID);
-    if (w && !keep) await this.placeWithRequote(w, 0);
+    // The risk guard runs on its own timer: re-check it before every placement.
+    if (w && !keep && this.mayPlace()) await this.placeWithRequote(w, 0);
+  }
+
+  /** Testnet checks only: start a rebalance from given targets, or age the market data. */
+  setTargetsForCheck(targets: Record<string, number>): void {
+    this.targets = targets;
+    this.targetsBoundary = Math.floor(Date.now() / (this.rules.rebalance_every_minutes * 60_000));
+  }
+  setMarksReadAtForCheck(ts: number): void {
+    this.lastMarksAt = ts;
   }
 
   /** Testnet check of the reprice rule: an order resting below the best bid is replaced at the best bid. */
@@ -206,9 +238,22 @@ export class Trader {
     await this.reconcile(symbol, { symbol, side, price, size, why: "exec check: reprice to the best price" });
   }
 
-  /** Post-only at the best price; if Strike says it would take, re-quote one tick away once (§9.5.5). */
-  async placeWithRequote(o: { symbol: string; side: "buy" | "sell"; price: string; size: string; why: string }, attempt: number): Promise<void> {
-    const order = await this.ex.placePostOnly({ symbol: o.symbol, side: o.side, price: o.price, size: o.size, clientOrderId: this.clientId(`${this.cycle}-${o.symbol}-${attempt}`), reason: o.why });
+  private mayPlace(): boolean {
+    return this.blocked.length === 0 && this.cfg.tradingOn() && !existsSync(this.cfg.pausedFile);
+  }
+
+  /**
+   * Post-only at the best price; if Strike says it would take, re-quote one tick away once (§9.5.5); if Strike
+   * accepted it but never placed it (E-DROPPED), retry once with a new id (§9.5.7).
+   */
+  async placeWithRequote(o: { symbol: string; side: "buy" | "sell"; price: string; size: string; why: string }, attempt: number, dropRetry = false): Promise<void> {
+    let order;
+    try {
+      order = await this.ex.placePostOnly({ symbol: o.symbol, side: o.side, price: o.price, size: o.size, clientOrderId: this.clientId(`${this.cycle}-${o.symbol}-${attempt}${dropRetry ? "r" : ""}`), reason: o.why });
+    } catch (e) {
+      if ((e as { code?: string }).code === "E-DROPPED" && !dropRetry && this.mayPlace()) return this.placeWithRequote(o, attempt, true);
+      throw e;
+    }
     const reason = String((order as { CloseReason?: string }).CloseReason ?? "");
     // Strike answers a post-only order that would take with Status "rejected" and this close reason (OBSERVED on testnet).
     if ((order.Status === "rejected" || order.Status === "canceled") && reason === "order_would_match_immediately" && attempt === 0) {
@@ -225,7 +270,8 @@ export class Trader {
     const last = this.db.prepare("SELECT MAX(trade_id) AS t FROM fills WHERE network=?").get(this.cfg.network) as { t: number | null };
     const path = `/v2/history/fill?limit=1000${last.t ? `&since_trade_id=${last.t}` : ""}`;
     const r = await this.ex.read(path);
-    const fills = ((r as { fills?: Array<Record<string, unknown>> }).fills ?? (r as { data?: Array<Record<string, unknown>> }).data ?? []) as Array<Record<string, unknown>>;
+    const fills = ((r as { fills?: Array<Record<string, unknown>> | null }).fills ?? []) as Array<Record<string, unknown>>;
+    if (accountStatusFrom(fills as Array<{ auto_close_type?: string }>) === "liquidation") this.accountStatus = "liquidation";
     const ins = this.db.prepare(
       "INSERT OR IGNORE INTO fills (network, fill_id, trade_id, order_id, client_order_id, symbol, side, role, price, size, fee, realized_pnl, ts, raw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     );
