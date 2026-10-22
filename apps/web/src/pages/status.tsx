@@ -60,7 +60,9 @@ function Body({ s, now }: { s: StatusReply; now: number }) {
             <tr key={r.id}>
               <td>{r.id}</td>
               <td>{time(r.at)}</td>
-              <td class={r.status === "COMPLETE" ? "ok" : "bad"}>{r.status === "COMPLETE" ? "Complete" : r.status.toLowerCase()}</td>
+              <td class={r.status === "COMPLETE" ? "ok" : r.status === "RUNNING" ? "" : "bad"}>
+                {r.status === "COMPLETE" ? "Complete" : r.status === "RUNNING" ? "In progress" : r.status.toLowerCase()}
+              </td>
             </tr>
           ))}
         </tbody>
