@@ -9,5 +9,5 @@ rev=$(git rev-parse --short HEAD)
 tmp=$(mktemp -d); git archive HEAD | tar -x -C "$tmp"; echo "$rev" > "$tmp/REVISION"
 rsync -az --delete --exclude node_modules --exclude data -e "ssh -i $KEY -o BatchMode=yes" "$tmp/" "$HOST:/home/tug/tug/"
 rm -rf "$tmp"
-ssh -i "$KEY" -o BatchMode=yes "$HOST" "chown -R tug:tug /home/tug/tug && sudo -u tug -H bash -lc 'cd ~/tug && nice -n 10 pnpm install --frozen-lockfile >/dev/null && pnpm typecheck && pnpm test 2>&1 | tail -4' && systemctl restart tug@mainnet && sleep 3 && systemctl is-active tug@mainnet"
+ssh -i "$KEY" -o BatchMode=yes "$HOST" "chown -R tug:tug /home/tug/tug && sudo -u tug -H bash -lc 'set -o pipefail; cd ~/tug && nice -n 10 pnpm install --frozen-lockfile >/dev/null && pnpm typecheck && pnpm test 2>&1 | tail -4' && systemctl restart tug@mainnet && sleep 3 && systemctl is-active tug@mainnet"
 echo "deployed $rev"

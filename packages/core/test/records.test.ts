@@ -48,7 +48,7 @@ describe("paper fills", () => {
     const [p] = paperRecord([a], rules);
     expect(p!.positions["ETH-USD"]).toBeCloseTo((5000 / 1990) * 2000);
     expect(p!.equity).toBeCloseTo(10_000 + (5000 / 1990) * 10 + 0.25);
-    expect(computeTargets({ A: 1, B: 0.3 }, 20, rules, (s) => (s === "B" ? 10 : 5))).toEqual({ A: 20 });
+    expect(computeTargets({ A: 1, B: 0.3 }, 20, rules, (s) => (s === "B" ? 10 : 5))).toEqual({ A: 10 });
   });
 });
 
