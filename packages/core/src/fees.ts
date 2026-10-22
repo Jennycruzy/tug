@@ -17,6 +17,8 @@ export interface FeesSaved {
     turnover: number;
     fees: number;
     orders: number;
+    /** Position changes that could not be measured because a size was not stored (reported, not guessed). */
+    unsized: number;
   };
   tug: { turnover: number; fees: number };
   /** Baseline fees minus TUG's (TUG's fees are negative when the maker rebate is earned). */
@@ -25,15 +27,17 @@ export interface FeesSaved {
 
 /**
  * Fees saved (§9.6.5), a lower bound: the baseline copies every copy pick one by one on `capital`, split
- * equally, each at a fixed ratio (share / the trader's account value), mirroring every position change
- * seen between snapshots as a market order at the taker fee. Only members in the crowd at both ends of a
- * step count, so joins and leaves add no cost. Snapshot changes undercount real fills, so the real
- * baseline costs more. TUG is the paper record's turnover at the maker fee.
+ * equally, each at a fixed ratio (share / the trader's account value), mirroring every change in position
+ * size seen between snapshots as a market order at the taker fee, valued at the later snapshot's Strike
+ * mark. A price move with no change in size is not a trade and costs nothing. Only members in the crowd at
+ * both ends of a step count, so joins and leaves add no cost. Snapshot changes undercount real fills, so
+ * the real baseline costs more. TUG is the paper record's turnover at the maker fee.
  */
 export function feesSaved(snaps: SnapshotInput[], crowds: Record<number, CopyCrowd>, paper: PaperPoint[], capital = 10_000): FeesSaved | undefined {
   if (snaps.length < 2 || paper.length === 0) return undefined;
   let turnover = 0;
   let orders = 0;
+  let unsized = 0;
   let subscriptions = 0;
   for (let i = 0; i + 1 < snaps.length; i++) {
     const a = snaps[i]!;
@@ -43,17 +47,35 @@ export function feesSaved(snaps: SnapshotInput[], crowds: Record<number, CopyCro
     if (!ca || !cb || cb.copyCount === 0) continue;
     subscriptions = Math.max(subscriptions, cb.copyCount);
     const share = capital / cb.copyCount;
-    const before = new Map<string, number>();
-    const after = new Map<string, number>();
-    for (const p of a.members) if (p.crowd === "copy") before.set(`${p.member}|${p.symbol}`, p.notional);
-    for (const p of b.members) if (p.crowd === "copy") after.set(`${p.member}|${p.symbol}`, p.notional);
+    // Size per member and market; a member can hold one market on two Hyperliquid exchanges, so sizes add up.
+    const sizes = (s: SnapshotInput) => {
+      const m = new Map<string, number | null>();
+      for (const p of s.members) {
+        if (p.crowd !== "copy") continue;
+        const k = `${p.member}|${p.symbol}`;
+        const prev = m.get(k);
+        m.set(k, p.size === undefined || p.size === null || prev === null ? null : (prev ?? 0) + p.size);
+      }
+      return m;
+    };
+    const before = sizes(a);
+    const after = sizes(b);
     for (const key of new Set([...before.keys(), ...after.keys()])) {
-      const member = key.slice(0, key.lastIndexOf("|"));
+      const sep = key.lastIndexOf("|");
+      const member = key.slice(0, sep);
+      const symbol = key.slice(sep + 1);
       const av = cb.accountValue[member];
       if (!(member in ca.accountValue) || !av || av <= 0) continue;
-      const change = Math.abs((after.get(key) ?? 0) - (before.get(key) ?? 0));
-      if (change === 0) continue;
-      turnover += change * (share / av);
+      const sa = before.has(key) ? before.get(key)! : 0;
+      const sb = after.has(key) ? after.get(key)! : 0;
+      if (sa === null || sb === null) {
+        unsized++;
+        continue;
+      }
+      const sizeChange = Math.abs(sb - sa);
+      const mark = b.marks[symbol]?.mark;
+      if (sizeChange === 0 || !mark) continue;
+      turnover += sizeChange * mark * (share / av);
       orders++;
     }
   }
@@ -64,7 +86,7 @@ export function feesSaved(snaps: SnapshotInput[], crowds: Record<number, CopyCro
     fromTs: snaps[0]!.ts,
     toTs: snaps[snaps.length - 1]!.ts,
     capital,
-    baseline: { subscriptions, perSubscriptionUsd: subscriptions ? capital / subscriptions : 0, turnover, fees: baselineFees, orders },
+    baseline: { subscriptions, perSubscriptionUsd: subscriptions ? capital / subscriptions : 0, turnover, fees: baselineFees, orders, unsized },
     tug: { turnover: last.turnover, fees: tugFees },
     saved: baselineFees - tugFees,
   };

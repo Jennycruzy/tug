@@ -179,4 +179,6 @@ function migrate(db: Db): void {
   add("marks", "min_notional", "min_notional REAL");
   // Rows written before this column existed keep NULL: their network was not recorded.
   add("events", "network", "network TEXT");
+  // Signed position size in base units; rows recorded before it were filled from the stored raw replies.
+  add("positions", "size", "size REAL");
 }

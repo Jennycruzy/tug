@@ -127,7 +127,7 @@ const schemas: Record<string, Schema> = {
         computed_at: int,
         capital: num,
         saved: num,
-        baseline: { type: "object", properties: { subscriptions: int, turnover: num, fees: num, orders: int } },
+        baseline: { type: "object", properties: { subscriptions: int, turnover: num, fees: num, orders: int, unsized: int } },
         tug: { type: "object", properties: { turnover: num, fees: num } },
       },
     }),

@@ -8,7 +8,7 @@ export function rebuildRecords(db: Db, rules: Rules, recordStartMs: number, netw
     .all(network, recordStartMs) as Array<{ id: number; started_at: number; mapping_version: number | null; crowd_version: number }>;
   const marksQ = db.prepare("SELECT symbol, mark, funding_rate, bid, ask, min_notional FROM marks WHERE snapshot_id=?");
   const gapsQ = db.prepare("SELECT symbol, gap FROM leans WHERE snapshot_id=? AND tradable=1");
-  const posQ = db.prepare("SELECT crowd, platform, member_id, symbol, signed_notional FROM positions WHERE snapshot_id=?");
+  const posQ = db.prepare("SELECT crowd, platform, member_id, symbol, signed_notional, size FROM positions WHERE snapshot_id=?");
 
   const inputs: SnapshotInput[] = snaps.map((s) => {
     const excluded = new Set(MAPPING_EXCLUDED[s.mapping_version ?? 0] ?? []);
@@ -25,9 +25,9 @@ export function rebuildRecords(db: Db, rules: Rules, recordStartMs: number, netw
       gaps: Object.fromEntries(
         (gapsQ.all(s.id) as Array<{ symbol: string; gap: number }>).filter((g) => !excluded.has(g.symbol)).map((g) => [g.symbol, g.gap]),
       ),
-      members: (posQ.all(s.id) as Array<{ crowd: "copy" | "fade"; platform: string; member_id: string; symbol: string; signed_notional: number }>)
+      members: (posQ.all(s.id) as Array<{ crowd: "copy" | "fade"; platform: string; member_id: string; symbol: string; signed_notional: number; size: number | null }>)
         .filter((p) => !excluded.has(p.symbol))
-        .map((p) => ({ crowd: p.crowd, member: `${p.platform}:${p.member_id}`, symbol: p.symbol, notional: p.signed_notional })),
+        .map((p) => ({ crowd: p.crowd, member: `${p.platform}:${p.member_id}`, symbol: p.symbol, notional: p.signed_notional, size: p.size })),
     };
   });
 

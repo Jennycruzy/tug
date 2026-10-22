@@ -84,7 +84,7 @@ export async function takeSnapshot(
           for (const p of s.positions) {
             const symbol = strikeMarketForHlCoin(p.coin);
             if (!symbol || p.size === 0 || disabled.has(p.coin)) continue;
-            rows.push({ memberId: `hl:${m.memberId}`, crowd: m.crowd, symbol, signedNotional: Math.sign(p.size) * p.value });
+            rows.push({ memberId: `hl:${m.memberId}`, crowd: m.crowd, symbol, signedNotional: Math.sign(p.size) * p.value, size: p.size });
             acct.set(`hl:${m.memberId}`, m.accountValue);
           }
         }
@@ -94,7 +94,7 @@ export async function takeSnapshot(
         for (const p of s.positions) {
           const mark = marks[p.symbol];
           if (!mark || p.size === 0) continue;
-          rows.push({ memberId: `strike:${m.memberId}`, crowd: m.crowd, symbol: p.symbol, signedNotional: p.size * mark });
+          rows.push({ memberId: `strike:${m.memberId}`, crowd: m.crowd, symbol: p.symbol, signedNotional: p.size * mark, size: p.size });
           acct.set(`strike:${m.memberId}`, m.accountValue);
         }
       }
@@ -124,11 +124,11 @@ export async function takeSnapshot(
 
   db.transaction(() => {
     const insPos = db.prepare(
-      "INSERT INTO positions (snapshot_id, platform, member_id, crowd, symbol, signed_notional, account_value) VALUES (?,?,?,?,?,?,?)",
+      "INSERT INTO positions (snapshot_id, platform, member_id, crowd, symbol, signed_notional, account_value, size) VALUES (?,?,?,?,?,?,?,?)",
     );
     for (const r of rows) {
       const [platform, ...rest] = r.memberId.split(":");
-      insPos.run(snapId, platform === "hl" ? "hyperliquid" : "strike", rest.join(":"), r.crowd, r.symbol, r.signedNotional, acct.get(r.memberId) ?? null);
+      insPos.run(snapId, platform === "hl" ? "hyperliquid" : "strike", rest.join(":"), r.crowd, r.symbol, r.signedNotional, acct.get(r.memberId) ?? null, r.size ?? null);
     }
     const insMark = db.prepare("INSERT INTO marks (snapshot_id, symbol, mark, funding_rate, bid, ask, min_notional) VALUES (?,?,?,?,?,?,?)");
     for (const [sym, m] of Object.entries(markets)) {

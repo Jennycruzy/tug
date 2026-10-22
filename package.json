@@ -14,9 +14,12 @@
     "order:rest": "tsx apps/engine/src/cli/order.ts",
     "kill": "tsx apps/engine/src/cli/kill.ts",
     "replay": "tsx apps/engine/src/cli/replay.ts",
+    "backfill:sizes": "tsx apps/engine/src/cli/backfill-sizes.ts",
+    "site:check": "tsx apps/web/test/site-check.ts",
     "web:build": "pnpm --filter @tug/web build"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",

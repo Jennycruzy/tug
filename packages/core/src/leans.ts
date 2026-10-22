@@ -8,6 +8,8 @@ export interface PositionRow {
   symbol: string;
   /** Signed USD notional: positive long, negative short. */
   signedNotional: number;
+  /** Signed position size in base units, as reported by the source (stored for fees saved). */
+  size?: number;
 }
 
 export interface CrowdSide {

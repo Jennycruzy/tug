@@ -59,9 +59,12 @@ describe("privacy of Strike's own traders", () => {
     );
     db.prepare("INSERT INTO crowd_members (version_id, platform, member_id, crowd, copy_score, style, account_value, pnl_30d, raw_json) VALUES (1,'strike','fade-check-member-0000-0000-0000','fade',40,'swing',5000,-10,'null')").run();
     const app = buildApi(db, { ...ctx, rulesSha256: loadRules("rules/tug-rules-v1.json").sha256 });
+    const { rebuildRecords } = await import("../src/records.js");
+    rebuildRecords(db, loadRules("rules/tug-rules-v1.json").rules, Date.parse("2026-10-22T11:55:21Z"), "mainnet");
     const market = await app.inject({ url: `/api/v1/tug/${row.symbol}` });
     const crowds = await app.inject({ url: "/api/v1/crowds" });
-    for (const r of [market, crowds]) {
+    const every = ["/api/v1/tug", "/api/v1/scoreboard", "/api/v1/paper", "/api/v1/record", "/api/v1/record/fills", "/api/v1/proof", "/api/v1/status", "/api/openapi.json", "/llms.txt"];
+    for (const r of [market, crowds, ...(await Promise.all(every.map((url) => app.inject({ url }))))]) {
       expect(r.statusCode).toBe(200);
       expect(r.body).not.toContain("fade-check-member");
       expect(r.body).not.toContain("fade-c");
@@ -77,7 +80,9 @@ describe("privacy of Strike's own traders", () => {
     const ids = (db.prepare("SELECT member_id FROM crowd_members WHERE version_id=1 AND platform='strike'").all() as Array<{ member_id: string }>).map((r) => r.member_id);
     expect(ids.length).toBeGreaterThan(0);
     const app = buildApi(db, ctx);
-    for (const url of ["/api/v1/crowds", "/api/v1/tug", ...["SOL-USD", "ETH-USD", "BTC-USD"].map((s) => `/api/v1/tug/${s}`)]) {
+    const every = ["/api/v1/crowds", "/api/v1/tug", "/api/v1/scoreboard", "/api/v1/paper", "/api/v1/record", "/api/v1/record/fills", "/api/v1/proof", "/api/v1/status"];
+    const markets = (db.prepare("SELECT DISTINCT symbol FROM leans").all() as Array<{ symbol: string }>).map((r) => `/api/v1/tug/${r.symbol}`);
+    for (const url of [...every, ...markets]) {
       const body = (await app.inject({ url })).body;
       for (const id of ids) expect(body, `${url} shows ${id}`).not.toContain(id);
     }

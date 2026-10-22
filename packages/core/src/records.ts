@@ -10,7 +10,7 @@ export interface SnapshotInput {
   /** The crowd version the snapshot read (fees saved needs each member's account value). */
   crowdVersion?: number;
   /** Signed notional per member and market: key `${crowd}|${member}|${symbol}`. */
-  members: Array<{ crowd: "copy" | "fade"; member: string; symbol: string; notional: number }>;
+  members: Array<{ crowd: "copy" | "fade"; member: string; symbol: string; notional: number; size?: number | null }>;
 }
 
 export const MAKER_FEE = -0.00005;
