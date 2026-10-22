@@ -51,6 +51,19 @@ export function mappingTableFingerprint(): string {
   return bytesToHex(sha256(new TextEncoder().encode(JSON.stringify({ dexes: HL_DEXES, rows, strikeOnly: STRIKE_ONLY_MARKETS }))));
 }
 
+/**
+ * Markets whose source changed when each mapping version started: across that step their positions are
+ * not comparable (a market newly read, or read from another contract), so a change there is not a trade.
+ */
+export const MAPPING_CHANGES: Record<number, string[]> = { 2: ["WTI-USD"], 3: ["SNDK-USD", "DRAM-USD"], 4: ["LIT-USD"] };
+
+/** Markets whose source changed between two mapping versions (both included in the span). */
+export function marketsRemapped(fromVersion: number, toVersion: number): Set<string> {
+  const out = new Set<string>();
+  for (let v = Math.min(fromVersion, toVersion) + 1; v <= Math.max(fromVersion, toVersion); v++) for (const m of MAPPING_CHANGES[v] ?? []) out.add(m);
+  return out;
+}
+
 /** Markets whose rows are not comparable under a given mapping version and are left out of records. */
 export const MAPPING_EXCLUDED: Record<number, string[]> = { 1: ["WTI-USD"], 2: [], 3: [], 4: [] };
 

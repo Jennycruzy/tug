@@ -9,6 +9,8 @@ export interface SnapshotInput {
   gaps: Record<string, number>;
   /** The crowd version the snapshot read (fees saved needs each member's account value). */
   crowdVersion?: number;
+  /** The market mapping the snapshot used. */
+  mappingVersion?: number;
   /** Signed notional per member and market: key `${crowd}|${member}|${symbol}`. */
   members: Array<{ crowd: "copy" | "fade"; member: string; symbol: string; notional: number; size?: number | null }>;
 }

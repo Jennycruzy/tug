@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  MAPPING_CHANGES,
   MAPPING_FINGERPRINTS,
   MAPPING_VERSION,
   RulesSchema,
@@ -13,6 +14,7 @@ import {
   computeTargets,
   loadRules,
   mappedHlCoins,
+  marketsRemapped,
   mappingTableFingerprint,
   rulesFingerprint,
   strikeMarketForHlCoin,
@@ -197,5 +199,13 @@ describe("targets, property", () => {
         expect(Math.sign(v)).toBe(Math.sign(gaps[s]!));
       }
     }
+  });
+});
+
+describe("mapping changes", () => {
+  it("every version after the first names the markets it changed, and spans add up", () => {
+    for (let v = 2; v <= MAPPING_VERSION; v++) expect(MAPPING_CHANGES[v]?.length, `version ${v}`).toBeGreaterThan(0);
+    expect([...marketsRemapped(1, 4)].sort()).toEqual(["DRAM-USD", "LIT-USD", "SNDK-USD", "WTI-USD"]);
+    expect(marketsRemapped(3, 3).size).toBe(0);
   });
 });

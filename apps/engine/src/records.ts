@@ -16,6 +16,7 @@ export function rebuildRecords(db: Db, rules: Rules, recordStartMs: number, netw
       id: s.id,
       ts: s.started_at,
       crowdVersion: s.crowd_version,
+      mappingVersion: s.mapping_version ?? 0,
       marks: Object.fromEntries(
         (marksQ.all(s.id) as Array<{ symbol: string; mark: number; funding_rate: number | null; bid: number | null; ask: number | null; min_notional: number | null }>).map((m) => [
           m.symbol,

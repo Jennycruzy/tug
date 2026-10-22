@@ -1,3 +1,4 @@
+import { marketsRemapped } from "./mapping.js";
 import { MAKER_FEE, TAKER_FEE, type PaperPoint, type SnapshotInput } from "./records.js";
 
 /** One crowd version's copy picks: how many, and each member's account value (USD), keyed `${platform}:${id}`. */
@@ -30,7 +31,8 @@ export interface FeesSaved {
  * equally, each at a fixed ratio (share / the trader's account value), mirroring every change in position
  * size seen between snapshots as a market order at the taker fee, valued at the later snapshot's Strike
  * mark. A price move with no change in size is not a trade and costs nothing. Only members in the crowd at
- * both ends of a step count, so joins and leaves add no cost. Snapshot changes undercount real fills, so
+ * both ends of a step count, so joins and leaves add no cost; nor do markets whose mapping changed between
+ * the two snapshots (their positions are not comparable). Snapshot changes undercount real fills, so
  * the real baseline costs more. TUG is the paper record's turnover at the maker fee.
  */
 export function feesSaved(snaps: SnapshotInput[], crowds: Record<number, CopyCrowd>, paper: PaperPoint[], capital = 10_000): FeesSaved | undefined {
@@ -60,10 +62,12 @@ export function feesSaved(snaps: SnapshotInput[], crowds: Record<number, CopyCro
     };
     const before = sizes(a);
     const after = sizes(b);
+    const remapped = marketsRemapped(a.mappingVersion ?? 0, b.mappingVersion ?? 0);
     for (const key of new Set([...before.keys(), ...after.keys()])) {
       const sep = key.lastIndexOf("|");
       const member = key.slice(0, sep);
       const symbol = key.slice(sep + 1);
+      if (remapped.has(symbol)) continue;
       const av = cb.accountValue[member];
       if (!(member in ca.accountValue) || !av || av <= 0) continue;
       const sa = before.has(key) ? before.get(key)! : 0;
