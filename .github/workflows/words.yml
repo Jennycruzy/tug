@@ -1,0 +1,15 @@
+name: words
+on: [push, pull_request]
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Words that never appear in tracked files
+        env:
+          WORDS_PRIVATE: ${{ secrets.WORDS_PRIVATE }}
+        run: |
+          words='milestone|gate|checkpoint|spec|codex|claude|auditor|breaker|a-item|u-item|TODO|FIXME|mock|stub|fake'
+          if [ -n "$WORDS_PRIVATE" ]; then words="$words|$WORDS_PRIVATE"; fi
+          hits=$(git ls-files -z | grep -zv -E '^(pnpm-lock.yaml|\.github/workflows/words.yml)$' | xargs -0 grep -n -i -w -E "($words)" | grep -v -F -f .github/words-allow.txt || true)
+          if [ -n "$hits" ]; then echo "$hits"; exit 1; fi

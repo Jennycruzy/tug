@@ -1,0 +1,22 @@
+{
+  "name": "tug",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.18.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc -b packages/core packages/hl packages/strike apps/engine",
+    "test": "vitest run",
+    "engine": "tsx apps/engine/src/main.ts",
+    "rules:hash": "tsx packages/core/src/cli/rulesHash.ts"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

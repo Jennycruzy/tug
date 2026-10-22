@@ -1,0 +1,20 @@
+[Unit]
+Description=TUG engine (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=tug
+Group=tug
+WorkingDirectory=/home/tug/tug
+EnvironmentFile=/home/tug/tug-private/env/%i.env
+ExecStart=/home/tug/tug/node_modules/.bin/tsx apps/engine/src/main.ts
+Restart=always
+RestartSec=5
+CPUWeight=400
+MemoryMax=1G
+StandardOutput=append:/home/tug/tug-private/logs/%i.log
+StandardError=append:/home/tug/tug-private/logs/%i.log
+
+[Install]
+WantedBy=multi-user.target

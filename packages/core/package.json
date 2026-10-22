@@ -1,0 +1,12 @@
+{
+  "name": "@tug/core",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^3.23.8",
+    "@noble/hashes": "^1.5.0"
+  }
+}

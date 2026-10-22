@@ -1,0 +1,11 @@
+name: layout
+on: [push, pull_request]
+jobs:
+  layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          allowed='^(packages|apps|rules|evidence|docs|deploy|\.github|README\.md|LICENSE|CHANGELOG\.md|CONTRIBUTING\.md|SECURITY\.md|THIRD_PARTY_NOTICES\.md|BUILDLOG\.md|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|vitest\.config\.ts|\.gitignore|\.nvmrc)$'
+          bad=$(git ls-files | cut -d/ -f1 | sort -u | grep -v -E "$allowed" || true)
+          if [ -n "$bad" ]; then echo "Unexpected top-level entries: $bad"; exit 1; fi
