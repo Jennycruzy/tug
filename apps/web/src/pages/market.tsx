@@ -77,10 +77,10 @@ function Body({ d, now }: { d: MarketReply; now: number }) {
       <h2>Strike market</h2>
       <div class="kv card">
         <span>Mark</span>
-        <b>{m.mark ?? "—"}</b>
+        <b>{price(m.mark)}</b>
         <span>Best bid / ask</span>
         <b>
-          {m.bid ?? "—"} / {m.ask ?? "—"}
+          {price(m.bid)} / {price(m.ask)}
         </b>
         <span>Funding rate (Strike, latest)</span>
         <b>{m.funding_rate === null ? "—" : `${(m.funding_rate * 100).toFixed(4)}%`}</b>
@@ -88,6 +88,9 @@ function Body({ d, now }: { d: MarketReply; now: number }) {
     </>
   );
 }
+
+/** Prices to six significant digits. */
+const price = (v: number | null) => (v === null ? "—" : String(Number(v.toPrecision(6))));
 
 function why(reason: string, tradable: boolean): string {
   if (!tradable) return "No clear gap: TUG holds nothing here";
