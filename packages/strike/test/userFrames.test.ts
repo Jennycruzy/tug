@@ -34,12 +34,15 @@ describe("Strike user stream (real testnet frames, 2026-10-22)", () => {
     const states = parsed.filter((p) => p.socket === "A2" && p.f.kind === "order").map((p) => (p.f as { order: { X: string } }).order.X);
     expect(states).toEqual(["OPEN", "CANCELED"]);
   });
-  it("keepalive: pings every 54 s; a socket that never answers is closed at about 60 s", () => {
+  it("keepalive: pings every 54 s; a socket that never answers is closed about 6 s after the first ping", () => {
     const pings = fixture.frames.filter((r) => r.socket === "A" && r.event === "ping frame").map((r) => Date.parse(r.t));
     expect(pings.length).toBe(3);
     for (let i = 1; i < pings.length; i++) expect(Math.round((pings[i]! - pings[i - 1]!) / 1000)).toBe(KEEPALIVE.serverPingEverySeconds);
     const closeB = fixture.frames.find((r) => r.socket === "B" && r.event === "close")!.data as { code: number; afterSeconds: number };
     expect(closeB.code).toBe(1006);
     expect(Math.round(closeB.afterSeconds)).toBe(KEEPALIVE.closeWithoutPongSeconds);
+    const pingB = Date.parse(fixture.frames.find((r) => r.socket === "B" && r.event === "ping frame")!.t);
+    const closeBAt = Date.parse(fixture.frames.find((r) => r.socket === "B" && r.event === "close")!.t);
+    expect(Math.round((closeBAt - pingB) / 1000)).toBe(KEEPALIVE.closeAfterUnansweredPingSeconds);
   });
 });

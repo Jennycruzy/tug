@@ -2,11 +2,12 @@ import { z } from "zod";
 
 /**
  * Strike user-stream frames, as observed on testnet on 2026-10-22 (fixtures in test/fixtures).
- * Keepalive: the server sends a WebSocket ping every 54 s and closes a socket that sends no pong
- * within about 60 s (code 1006). After a drop, log on and subscribe again; nothing is replayed, so
- * state is re-read over REST.
+ * Keepalive: the server sends a WebSocket ping every 54 s and closes a socket about 6 s after a ping
+ * goes unanswered (code 1006; about 60 s after open for the first ping). Answer pings at once (the ws
+ * library's default auto-pong); never delay or batch pongs. After a drop, log on and subscribe again;
+ * nothing is replayed, so state is re-read over REST.
  */
-export const KEEPALIVE = { serverPingEverySeconds: 54, closeWithoutPongSeconds: 60 } as const;
+export const KEEPALIVE = { serverPingEverySeconds: 54, closeWithoutPongSeconds: 60, closeAfterUnansweredPingSeconds: 6 } as const;
 
 const num = z.union([z.string(), z.number()]).transform((v) => Number(v));
 

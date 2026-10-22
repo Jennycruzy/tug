@@ -37,7 +37,6 @@ TABLE.set("io:DRAM", "DRAM-USD");
  * v3 (snapshot 23 →): main, xyz, io; adds io:SNDK and io:DRAM.
  */
 export const MAPPING_VERSION = 3;
-/** Markets whose rows are not comparable under a given mapping version and are left out of records. */
 /** The table fingerprint each mapping version shipped with; a test fails if the table changes without a new version. */
 export const MAPPING_FINGERPRINTS: Record<number, string> = { 3: "7cb7d57affd526a3108f14706df91aa232178c7e7d8d61b6ab3efb0e598d72e0" };
 
@@ -47,6 +46,7 @@ export function mappingTableFingerprint(): string {
   return bytesToHex(sha256(new TextEncoder().encode(JSON.stringify({ dexes: HL_DEXES, rows, strikeOnly: STRIKE_ONLY_MARKETS }))));
 }
 
+/** Markets whose rows are not comparable under a given mapping version and are left out of records. */
 export const MAPPING_EXCLUDED: Record<number, string[]> = { 1: ["WTI-USD"], 2: [], 3: [] };
 
 /** Markets with no Hyperliquid source; their crowds come from Strike traders only. */
