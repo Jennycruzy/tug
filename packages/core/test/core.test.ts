@@ -4,12 +4,15 @@ import {
   MAPPING_FINGERPRINTS,
   MAPPING_VERSION,
   RulesSchema,
+  STRIKE_ONLY_MARKETS,
   WeightBucket,
   allMappedMarkets,
   assertPublished,
   checkMapping,
   computeLeans,
+  computeTargets,
   loadRules,
+  mappedHlCoins,
   mappingTableFingerprint,
   rulesFingerprint,
   strikeMarketForHlCoin,
@@ -164,5 +167,35 @@ describe("mapping version", () => {
     expect(mappingTableFingerprint(), "mapping table changed: bump MAPPING_VERSION and record its fingerprint").toBe(
       MAPPING_FINGERPRINTS[MAPPING_VERSION],
     );
+  });
+});
+
+describe("mapping, Strike-only markets", () => {
+  it("T-MAP-5 NIGHT-USD has no Hyperliquid source and is still covered", () => {
+    expect(STRIKE_ONLY_MARKETS).toContain("NIGHT-USD");
+    expect(mappedHlCoins().some(([, market]) => market === "NIGHT-USD")).toBe(false);
+    expect(allMappedMarkets()).toContain("NIGHT-USD");
+  });
+});
+
+describe("targets, property", () => {
+  it("no target ever exceeds the gross or per-market caps, and none is below its minimum (5,000 seeded cases)", () => {
+    let seed = 20261022;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    for (let i = 0; i < 5_000; i++) {
+      const n = 1 + Math.floor(rnd() * 33);
+      const gaps: Record<string, number> = {};
+      for (let k = 0; k < n; k++) gaps[`M${k}-USD`] = rnd() < 0.2 ? 0 : (rnd() * 2 - 1);
+      const equity = 5 + rnd() * 20_000;
+      const minimum = rnd() < 0.5 ? 5 : 10;
+      const t = computeTargets(gaps, equity, rules, () => minimum);
+      const gross = Object.values(t).reduce((a, v) => a + Math.abs(v), 0);
+      expect(gross).toBeLessThanOrEqual(rules.gross_exposure_cap * equity * (1 + 1e-9));
+      for (const [s, v] of Object.entries(t)) {
+        expect(Math.abs(v)).toBeLessThanOrEqual(rules.per_market_cap * equity * (1 + 1e-9));
+        expect(Math.abs(v)).toBeGreaterThanOrEqual(minimum);
+        expect(Math.sign(v)).toBe(Math.sign(gaps[s]!));
+      }
+    }
   });
 });

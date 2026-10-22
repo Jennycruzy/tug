@@ -13,6 +13,7 @@
     "rules:hash": "tsx packages/core/src/cli/rulesHash.ts",
     "order:rest": "tsx apps/engine/src/cli/order.ts",
     "kill": "tsx apps/engine/src/cli/kill.ts",
+    "replay": "tsx apps/engine/src/cli/replay.ts",
     "web:build": "pnpm --filter @tug/web build"
   },
   "devDependencies": {

@@ -20,6 +20,11 @@ export function signingMessage(method: string, path: string, ts: number, nonce: 
   return `${method}:${path}:${ts}:${nonce}:${createHash("sha256").update(body).digest("hex")}`;
 }
 
+/** The user stream's logon message: `session.logon:<unix_seconds>:<public key hex>`, signed with the same key. */
+export function wsLogonMessage(ts: number, publicKeyHex: string): string {
+  return `session.logon:${ts}:${publicKeyHex}`;
+}
+
 export interface SignedReply {
   status: number;
   json: unknown;

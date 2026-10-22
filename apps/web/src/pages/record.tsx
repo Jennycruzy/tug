@@ -1,4 +1,6 @@
 import { ago, day, signed, time, usd, useApi, type RecordReply } from "../api.js";
+
+const cents = (v: number) => `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 import { LineChart } from "../chart.js";
 import { useNow } from "../now.js";
 
@@ -31,16 +33,16 @@ function Paper({ p, now }: { p: NonNullable<RecordReply["paper"]>; now: number }
       <div class="card kv">
         <span>Equity</span>
         <b>
-          {usd(p.equity)} ({signed((change / p.start_equity) * 100)}%)
+          {cents(p.equity)} ({signed((change / p.start_equity) * 100)}%)
         </b>
         <span>Started with</span>
-        <b>{usd(p.start_equity)}</b>
+        <b>{cents(p.start_equity)}</b>
         <span>Traded</span>
         <b>{usd(p.turnover)}</b>
         <span>Maker fees</span>
-        <b>{p.fees <= 0 ? `${usd(-p.fees)} rebate earned` : `${usd(p.fees)} paid`}</b>
+        <b>{p.fees <= 0 ? `${cents(-p.fees)} rebate earned` : `${cents(p.fees)} paid`}</b>
         <span>Funding</span>
-        <b>{p.funding >= 0 ? `${usd(p.funding)} received` : `${usd(-p.funding)} paid`}</b>
+        <b>{p.funding >= 0 ? `${cents(p.funding)} received` : `${cents(-p.funding)} paid`}</b>
         <span>Updated</span>
         <b>
           {ago(p.at, now)} (snapshot #{p.snapshot_id})

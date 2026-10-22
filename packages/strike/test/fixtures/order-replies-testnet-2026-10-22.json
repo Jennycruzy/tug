@@ -1,0 +1,20 @@
+{
+ "note": "real Strike testnet replies, unmodified; captured by the build server",
+ "source_file": "probes/out/order-refused-testnet-2026-10-22T18-30-29-295Z.json",
+ "replies": {
+  "order_accepted": {
+   "server": "https://api-v2-testnet.strikefinance.org",
+   "captured_at": "2026-10-22T18:30:29.295Z",
+   "request": "POST /v2/order (post-only limit, symbol NOPE-USD)",
+   "status": 201,
+   "raw": "{\"client_order_id\":\"tug-probe-badsymbol-1792693829295\",\"account_id\":\"01a163bf-fb0a-77b0-86c0-03a62889ee01\",\"symbol\":\"NOPE-USD\",\"status\":\"pending\",\"sequence_id\":93979296,\"message_id\":\"1792693829645-0\"}"
+  },
+  "order_not_found": {
+   "server": "https://api-v2-testnet.strikefinance.org",
+   "captured_at": "2026-10-22T18:30:42.074Z",
+   "request": "GET /v2/order?symbol=NOPE-USD&client_order_id=tug-probe-badsymbol-1792693829295",
+   "status": 404,
+   "raw": "{\"error\":\"order not found\"}"
+  }
+ }
+}
