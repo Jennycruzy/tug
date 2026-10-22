@@ -109,3 +109,64 @@ export function ago(ts: number, now = Date.now()): string {
 }
 
 export const time = (ts: number) => new Date(ts).toISOString().slice(11, 16) + " UTC";
+
+export interface PaperSummary {
+  label: "MODEL";
+  start_equity: number;
+  start: number;
+  at: number;
+  snapshot_id: number;
+  equity: number;
+  turnover: number;
+  fees: number;
+  funding: number;
+  positions: Array<{ symbol: string; notional: number }>;
+}
+
+export interface RecordReply {
+  network: "mainnet" | "testnet";
+  live: null;
+  vault: null;
+  paper: (PaperSummary & { curve: Array<{ at: number; equity: number }> }) | null;
+}
+
+export interface CrowdResult {
+  pnl: number;
+  up: number;
+  active: number;
+}
+
+export interface ScoreboardReply {
+  since_record_start: {
+    from: number;
+    to: number;
+    snapshots: number;
+    copy: CrowdResult;
+    fade: CrowdResult;
+    markets: Array<{ symbol: string; copy: number; fade: number }>;
+  } | null;
+  before_record: {
+    label: string;
+    copy_picks: { group: string; active: number; up: number };
+    fade_picks: { group: string; active: number; down: number };
+  };
+}
+
+export interface ProofReply {
+  rules: Array<{ version: number; sha256: string; published_commit: string; record_start: string }>;
+  mapping: { version: number; fingerprint: string | null; markets_covered: number };
+  snapshots_since_record_start: { complete: number; partial: number; interrupted: number };
+  fees_saved: {
+    computed_at: number;
+    fromTs: number;
+    toTs: number;
+    capital: number;
+    baseline: { subscriptions: number; perSubscriptionUsd: number; turnover: number; fees: number; orders: number };
+    tug: { turnover: number; fees: number };
+    saved: number;
+  } | null;
+  depth_added: null;
+  evidence: { code: string; data: string };
+}
+
+export const day = (ts: number) => new Date(ts).toISOString().slice(0, 10);

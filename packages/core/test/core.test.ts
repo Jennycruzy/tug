@@ -52,8 +52,9 @@ describe("mapping", () => {
     expect(strikeMarketForHlCoin("@107")).toBeUndefined();
     expect(strikeMarketForHlCoin("ARB")).toBeUndefined();
   });
-  it("T-MAP-3 all 32 Strike markets are covered (31 mapped + NIGHT Strike-only)", () => {
-    const strike = Object.keys(JSON.parse(readFileSync("packages/core/test/fixtures/strike-markets-2026-10-22.json", "utf8")).markets).sort();
+  it("T-MAP-3 all 33 Strike markets are covered (32 mapped + NIGHT Strike-only)", () => {
+    const strike = Object.keys(JSON.parse(readFileSync("packages/core/test/fixtures/strike-markets-2026-10-22-33.json", "utf8")).markets).sort();
+    expect(strike).toHaveLength(33);
     expect(allMappedMarkets()).toEqual(strike);
   });
   it("T-MAP-4 price check fails a wrong row", () => {

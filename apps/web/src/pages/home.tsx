@@ -1,4 +1,4 @@
-import { ago, time, usd, useApi, type Market, type TugReply } from "../api.js";
+import { ago, time, usd, useApi, type Market, type ProofReply, type TugReply } from "../api.js";
 import { useNow } from "../now.js";
 import { netWords, Rope, ropeLabel, sideWords } from "../rope.js";
 
@@ -49,6 +49,7 @@ export function Home() {
       {load.state === "loading" && <p class="note">Loading the latest snapshot…</p>}
       {load.state === "error" && <p class="note err">{load.message}</p>}
       {load.state === "ok" && <Ropes data={load.data} now={now} />}
+      <FeesSaved />
     </section>
   );
 }
@@ -102,5 +103,35 @@ function Ropes({ data, now }: { data: TugReply; now: number }) {
         the record started.
       </p>
     </>
+  );
+}
+
+function FeesSaved() {
+  const load = useApi<ProofReply>("/api/v1/proof", 300_000);
+  if (load.state !== "ok" || !load.data.fees_saved) return null;
+  const f = load.data.fees_saved;
+  return (
+    <div class="card fees">
+      <h2>Fees saved</h2>
+      <p>
+        Copying all {f.baseline.subscriptions} of Strike's copy picks one by one with {usd(f.capital)} would have paid{" "}
+        <b>{usd(f.baseline.fees)}</b> in taker fees over {f.baseline.orders.toLocaleString("en-US")} copied orders since the record
+        started. TUG's model account on the same {usd(f.capital)}{" "}
+        {f.tug.fees <= 0 ? (
+          <>
+            earned <b>{usd(-f.tug.fees)}</b> in maker rebates
+          </>
+        ) : (
+          <>
+            paid <b>{usd(f.tug.fees)}</b>
+          </>
+        )}
+        .
+      </p>
+      <p class="fine">
+        A lower bound: snapshots every 5 minutes undercount real fills. Strike copy subscriptions need at least $20 each, so
+        the one-by-one baseline needs {usd(f.baseline.subscriptions * 20)} or more to start.
+      </p>
+    </div>
   );
 }

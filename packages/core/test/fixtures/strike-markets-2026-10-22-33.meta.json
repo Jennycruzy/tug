@@ -1,0 +1,1 @@
+{ "server": "https://api.strikefinance.org", "request": "GET /v2/markets", "captured_at": "2026-10-22T18:17:53Z", "note": "unmodified reply, fetched from the build server; 33 markets including LIT-USD (listed 14:34:59Z)" }

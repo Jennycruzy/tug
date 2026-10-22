@@ -40,7 +40,7 @@ describe("public status", () => {
       .join("\n");
     const used = new Set([...text.matchAll(/"(E-[A-Z][A-Z-]*)"/g)].map((m) => m[1]!));
     // Codes that only ever answer an API request (never stored as events).
-    for (const c of ["E-NO-DATA", "E-SYMBOL"]) used.delete(c);
+    for (const c of ["E-NO-DATA", "E-SYMBOL", "E-NETWORK"]) used.delete(c);
     const missing = [...used].filter((c) => !PUBLIC_SENTENCES[c]);
     expect(missing).toEqual([]);
   });

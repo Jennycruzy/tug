@@ -49,7 +49,8 @@ export async function checkMappingLive(items: DiscoverItem[]): Promise<MappingRe
   return {
     checks,
     disabledCoins: checks.filter((c) => !c.ok).map((c) => c.coin),
-    uncoveredStrikeMarkets: [...strikeMapped].filter((s) => !covered.has(s)).sort(),
+    // Only symbols that are Strike markets count: `top_assets` also carries labels such as "ALL".
+    uncoveredStrikeMarkets: [...strikeMapped].filter((s) => s in markets && !covered.has(s)).sort(),
   };
 }
 

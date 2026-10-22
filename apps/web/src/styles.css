@@ -119,3 +119,6 @@ figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap
 .events { padding-left: 18px; font-size: 13px; }
 .events li { margin: 2px 0; }
 .legend i.knot, .chart figcaption i.knot { transform: rotate(45deg); }
+pre.code { overflow-x: auto; white-space: pre; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; }
+.top nav a { margin-left: 12px; } @media (max-width: 400px) { .top nav a { margin-left: 9px; font-size: 14px; } }
+.fees { margin-top: 16px; } .fees h2 { margin-top: 0; } .fees p { margin: 6px 0; }

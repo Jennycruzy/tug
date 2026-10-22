@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { computeTargets, loadRules, paperRecord, scoreboard, type SnapshotInput } from "../src/index.js";
+import { readFileSync } from "node:fs";
+import { computeTargets, loadRules, marketRulesFrom, paperRecord, planOrders, scoreboard, type SnapshotInput } from "../src/index.js";
 
 const rules = loadRules("rules/tug-rules-v1.json").rules;
 const snap = (id: number, minute: number, mark: number, gaps: Record<string, number>, members: SnapshotInput["members"] = []): SnapshotInput => ({
@@ -59,5 +60,54 @@ describe("scoreboard", () => {
     expect(b.total.copy).toBeCloseTo(50);
     expect(b.total.fade).toBeCloseTo(-100);
     expect(b.membersUp).toEqual({ copy: 1, fade: 0 });
+  });
+});
+
+describe("order sizing against Strike's real market rules (captured /v2/markets, 33 markets)", () => {
+  const reply = JSON.parse(readFileSync("packages/core/test/fixtures/strike-markets-2026-10-22-33.json", "utf8")).markets as Record<string, Record<string, unknown>>;
+  const mr = marketRulesFrom(reply);
+  const books = Object.fromEntries(Object.entries(reply).map(([s, m]) => [s, { bid: Number(m.bid1_price), ask: Number(m.ask1_price) }]));
+  const marks = Object.fromEntries(Object.entries(reply).map(([s, m]) => [s, Number(m.mark_price)]));
+  const decimals = (v: string) => (v.includes(".") ? v.split(".")[1]!.length : 0);
+  const onGrid = (v: string, step: string) => {
+    const d = Math.max(decimals(v), decimals(step));
+    return Math.round(Number(v) * 10 ** d) % Math.round(Number(step) * 10 ** d) === 0;
+  };
+
+  it("T-SIZE-3 every market: sizes on the step, prices on the tick, buys at the bid and sells at the ask", () => {
+    const usable = Object.keys(reply).filter((s) => books[s]!.ask > books[s]!.bid && books[s]!.bid > 0);
+    expect(usable.length).toBeGreaterThanOrEqual(30);
+    for (const sign of [1, -1]) {
+      const targets = Object.fromEntries(usable.map((s) => [s, sign * 250]));
+      const { orders } = planOrders(targets, {}, books, mr, rules.rebalance_band_fraction);
+      for (const o of orders) {
+        const r = mr[o.symbol]!;
+        expect(onGrid(o.size, r.step), `${o.symbol} size ${o.size} step ${r.step}`).toBe(true);
+        expect(onGrid(o.price, r.tick), `${o.symbol} price ${o.price} tick ${r.tick}`).toBe(true);
+        if (o.side === "buy") expect(Number(o.price)).toBeLessThanOrEqual(books[o.symbol]!.bid);
+        else expect(Number(o.price)).toBeGreaterThanOrEqual(books[o.symbol]!.ask);
+        expect(Number(o.size)).toBeLessThanOrEqual(Number(r.maxSize));
+        expect(o.notional).toBeGreaterThanOrEqual(r.minNotional);
+        expect(o.notional).toBeLessThanOrEqual(250 * 1.0001);
+      }
+    }
+  });
+  it("T-SIZE-4 a change inside the rebalance band places no order", () => {
+    const px = marks["ETH-USD"]!;
+    const held = { "ETH-USD": { size: (500 / px).toFixed(4), mark: px } };
+    const { orders, skipped } = planOrders({ "ETH-USD": 540 }, held, books, mr, rules.rebalance_band_fraction);
+    expect(orders).toEqual([]);
+    expect(skipped[0]!.why).toMatch(/band/);
+  });
+  it("T-SIZE-5 a target of zero closes the exact position, even below the minimum order value", () => {
+    const { orders } = planOrders({}, { "ZHIPU-USD": { size: "0.03", mark: marks["ZHIPU-USD"]! } }, books, mr, rules.rebalance_band_fraction);
+    expect(orders).toHaveLength(1);
+    expect(orders[0]).toMatchObject({ symbol: "ZHIPU-USD", side: "sell", size: "0.03", reduces: true });
+  });
+  it("T-SIZE-6 changes below the minimum are skipped; sizes never exceed the market's maximum", () => {
+    const tiny = planOrders({ "ETH-USD": 6 }, {}, books, mr, rules.rebalance_band_fraction);
+    expect(tiny.orders).toEqual([]);
+    const huge = planOrders({ "ADA-USD": 1e12 }, {}, books, mr, rules.rebalance_band_fraction);
+    expect(huge.orders[0]!.size).toBe(mr["ADA-USD"]!.maxSize);
   });
 });

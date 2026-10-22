@@ -111,6 +111,17 @@ CREATE TABLE IF NOT EXISTS orders (
   placed_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS targets (
+  snapshot_id INTEGER NOT NULL,
+  symbol TEXT NOT NULL,
+  target_usd REAL NOT NULL,
+  PRIMARY KEY (snapshot_id, symbol)
+);
+CREATE TABLE IF NOT EXISTS records_json (
+  name TEXT PRIMARY KEY,
+  computed_at INTEGER NOT NULL,
+  json TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS strike_calls (
   id INTEGER PRIMARY KEY,
   network TEXT NOT NULL,
@@ -141,8 +152,9 @@ export function logEvent(
   code?: string,
   data?: unknown,
 ): void {
-  db.prepare("INSERT INTO events (ts, component, level, code, message, data_json) VALUES (?,?,?,?,?,?)").run(
+  db.prepare("INSERT INTO events (ts, network, component, level, code, message, data_json) VALUES (?,?,?,?,?,?,?)").run(
     Date.now(),
+    process.env.TUG_NETWORK ?? "mainnet",
     component,
     level,
     code ?? null,
@@ -165,4 +177,6 @@ function migrate(db: Db): void {
   add("marks", "bid", "bid REAL");
   add("marks", "ask", "ask REAL");
   add("marks", "min_notional", "min_notional REAL");
+  // Rows written before this column existed keep NULL: their network was not recorded.
+  add("events", "network", "network TEXT");
 }

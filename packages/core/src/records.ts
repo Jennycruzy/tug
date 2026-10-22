@@ -7,6 +7,8 @@ export interface SnapshotInput {
   marks: Record<string, { mark: number; funding: number | null; mid?: number | null; minNotional?: number | null }>;
   /** Tradable gaps only (gap ≠ 0). */
   gaps: Record<string, number>;
+  /** The crowd version the snapshot read (fees saved needs each member's account value). */
+  crowdVersion?: number;
   /** Signed notional per member and market: key `${crowd}|${member}|${symbol}`. */
   members: Array<{ crowd: "copy" | "fade"; member: string; symbol: string; notional: number }>;
 }
@@ -48,6 +50,8 @@ export interface PaperPoint {
   fees: number;
   funding: number;
   positions: Record<string, number>;
+  /** Target notionals computed at this snapshot when it was a rebalance; absent otherwise. */
+  targets?: Record<string, number>;
 }
 
 /**
@@ -84,8 +88,10 @@ export function paperRecord(snaps: SnapshotInput[], rules: Rules, startEquity = 
       }
     }
     const isRebalance = !prev || Math.floor(s.ts / every) > Math.floor(prev.ts / every);
+    let rebalanceTargets: Record<string, number> | undefined;
     if (isRebalance) {
       const targets = computeTargets(s.gaps, equity, rules, (sym) => s.marks[sym]?.minNotional ?? 5);
+      rebalanceTargets = targets;
       const symbols = new Set([...Object.keys(units), ...Object.keys(targets)]);
       for (const sym of symbols) {
         const mark = s.marks[sym]?.mark;
@@ -109,7 +115,7 @@ export function paperRecord(snaps: SnapshotInput[], rules: Rules, startEquity = 
     }
     const positions: Record<string, number> = {};
     for (const [sym, u] of Object.entries(units)) positions[sym] = u * (s.marks[sym]?.mark ?? 0);
-    out.push({ snapshotId: s.id, ts: s.ts, equity, turnover, fees, funding, positions });
+    out.push({ snapshotId: s.id, ts: s.ts, equity, turnover, fees, funding, positions, ...(rebalanceTargets ? { targets: rebalanceTargets } : {}) });
     prev = s;
   }
   return out;

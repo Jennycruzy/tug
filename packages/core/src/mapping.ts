@@ -9,7 +9,8 @@ import { bytesToHex } from "@noble/hashes/utils";
 export const HL_DEXES = ["", "xyz", "io"] as const;
 export type HlDex = (typeof HL_DEXES)[number];
 
-const MAIN = ["ADA", "BNB", "BTC", "DOGE", "ETH", "HYPE", "NEAR", "PUMP", "SOL", "XRP", "ZEC"];
+// LIT added in mapping v4: Strike listed LIT-USD on 2026-10-22 (14:34:59Z); Hyperliquid main LIT 3.558 vs Strike mark 3.555.
+const MAIN = ["ADA", "BNB", "BTC", "DOGE", "ETH", "HYPE", "LIT", "NEAR", "PUMP", "SOL", "XRP", "ZEC"];
 const XYZ_SAME = [
   "AAOI", "COIN", "CRCL", "CXMT", "DRAM", "GOOGL", "MINIMAX", "MU", "NVDA",
   "SNDK", "SP500", "SPCX", "TSLA", "UNITREE", "ZHIPU",
@@ -34,11 +35,15 @@ TABLE.set("io:DRAM", "DRAM-USD");
  * Mapping versions, recorded on every snapshot so old snapshots replay with the table they used.
  * v1 (record start → snapshot 11): main, xyz, cash; WTI from cash:WTI (a different contract).
  * v2 (snapshots 12–22): main, xyz; WTI from xyz:CL.
- * v3 (snapshot 23 →): main, xyz, io; adds io:SNDK and io:DRAM.
+ * v3 (snapshots 23 → the v4 deploy): main, xyz, io; adds io:SNDK and io:DRAM.
+ * v4 (from the deploy that adds it): adds LIT (main) → LIT-USD, Strike's 33rd market.
  */
-export const MAPPING_VERSION = 3;
+export const MAPPING_VERSION = 4;
 /** The table fingerprint each mapping version shipped with; a test fails if the table changes without a new version. */
-export const MAPPING_FINGERPRINTS: Record<number, string> = { 3: "7cb7d57affd526a3108f14706df91aa232178c7e7d8d61b6ab3efb0e598d72e0" };
+export const MAPPING_FINGERPRINTS: Record<number, string> = {
+  3: "7cb7d57affd526a3108f14706df91aa232178c7e7d8d61b6ab3efb0e598d72e0",
+  4: "d3df429195bb0f22e706b630376f1af0a18556da2e40551ce7cd9b52b62ddcc2",
+};
 
 /** SHA-256 of the exchanges read and every coin → market row, in a fixed order. */
 export function mappingTableFingerprint(): string {
@@ -47,7 +52,7 @@ export function mappingTableFingerprint(): string {
 }
 
 /** Markets whose rows are not comparable under a given mapping version and are left out of records. */
-export const MAPPING_EXCLUDED: Record<number, string[]> = { 1: ["WTI-USD"], 2: [], 3: [] };
+export const MAPPING_EXCLUDED: Record<number, string[]> = { 1: ["WTI-USD"], 2: [], 3: [], 4: [] };
 
 /** Markets with no Hyperliquid source; their crowds come from Strike traders only. */
 export const STRIKE_ONLY_MARKETS = ["NIGHT-USD"];

@@ -1,0 +1,9 @@
+{
+  "label": "7 days before the record (15–22 Oct 2026), Strike-listed markets only",
+  "produced_by": "python3 -I evidence/pre-record/stats_7d.py <tug-evidence>/pre-record",
+  "produced_at": "2026-10-22T18:20:00Z",
+  "inputs_checked": "sha256sum -c evidence/pre-record/MANIFEST.sha256: OK",
+  "rounding": "money figures as the script prints them (millions, two decimals)",
+  "copy_picks": { "group": "top 250 copy picks by Strike copy score", "active": 93, "up": 71, "closed_pnl_usd_rounded": 1200000, "notional_usd_rounded": 364200000 },
+  "fade_picks": { "group": "Strike's counter-tagged traders", "active": 100, "down": 74, "closed_pnl_usd_rounded": -2180000, "notional_usd_rounded": 1337400000 }
+}
