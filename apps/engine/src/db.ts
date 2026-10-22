@@ -137,4 +137,8 @@ function migrate(db: Db): void {
   add("crowd_versions", "mapping_json", "mapping_json TEXT");
   add("snapshots", "network", "network TEXT NOT NULL DEFAULT 'mainnet'");
   add("positions", "account_value", "account_value REAL");
+  add("snapshots", "mapping_version", "mapping_version INTEGER");
+  add("marks", "bid", "bid REAL");
+  add("marks", "ask", "ask REAL");
+  add("marks", "min_notional", "min_notional REAL");
 }

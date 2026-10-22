@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import {
   HL_DEXES,
+  MAPPING_VERSION,
   STRIKE_ONLY_MARKETS,
   computeLeans,
   strikeMarketForHlCoin,
@@ -11,7 +12,7 @@ import {
   type Rules,
 } from "@tug/core";
 import { clearinghouseState } from "@tug/hl";
-import { markets as strikeMarkets, publicPositions } from "@tug/strike";
+import { bookTickers, markets as strikeMarkets, publicPositions } from "@tug/strike";
 import type { CrowdVersion, Member } from "./crowds.js";
 import { logEvent, type Db } from "./db.js";
 
@@ -53,11 +54,12 @@ export async function takeSnapshot(
 ): Promise<SnapshotResult> {
   const started = Date.now();
   const snapId = Number(
-    db.prepare("INSERT INTO snapshots (crowd_version, started_at, status, network) VALUES (?,?,'RUNNING',?)").run(crowd.id, started, network)
+    db.prepare("INSERT INTO snapshots (crowd_version, started_at, status, network, mapping_version) VALUES (?,?,'RUNNING',?,?)").run(crowd.id, started, network, MAPPING_VERSION)
       .lastInsertRowid,
   );
 
   const { markets } = await strikeMarkets();
+  const books = await bookTickers().catch(() => ({}) as Record<string, { bid: number; ask: number }>);
   const marks: Record<string, number> = {};
   for (const [sym, m] of Object.entries(markets)) if (m.mark_price && m.mark_price > 0) marks[sym] = m.mark_price;
 
@@ -124,9 +126,10 @@ export async function takeSnapshot(
       const [platform, ...rest] = r.memberId.split(":");
       insPos.run(snapId, platform === "hl" ? "hyperliquid" : "strike", rest.join(":"), r.crowd, r.symbol, r.signedNotional, acct.get(r.memberId) ?? null);
     }
-    const insMark = db.prepare("INSERT INTO marks (snapshot_id, symbol, mark, funding_rate) VALUES (?,?,?,?)");
+    const insMark = db.prepare("INSERT INTO marks (snapshot_id, symbol, mark, funding_rate, bid, ask, min_notional) VALUES (?,?,?,?,?,?,?)");
     for (const [sym, m] of Object.entries(markets)) {
-      if (m.mark_price && m.mark_price > 0) insMark.run(snapId, sym, m.mark_price, m.funding_rate ?? null);
+      const b = books[sym];
+      if (m.mark_price && m.mark_price > 0) insMark.run(snapId, sym, m.mark_price, m.funding_rate ?? null, b?.bid ?? null, b?.ask ?? null, m.order_min_notional ?? null);
     }
     const insLean = db.prepare(
       "INSERT INTO leans (snapshot_id, symbol, long_copy, short_copy, lean_copy, n_copy, long_fade, short_fade, lean_fade, n_fade, gap, tradable, reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",

@@ -86,3 +86,12 @@ export async function markets(): Promise<{ markets: Record<string, StrikeMarket>
   const { json, raw } = await fetchJson(`${STRIKE_API_URL}/v2/markets`, { weight: READ_WEIGHT, bucket: strikeBucket });
   return { markets: z.object({ markets: z.record(MarketSchema) }).parse(json).markets, raw };
 }
+
+const BookTickerSchema = z.array(z.object({ symbol: z.string(), bidPrice: num, askPrice: num }).passthrough());
+
+/** Best bid and ask for every market in one public call. */
+export async function bookTickers(): Promise<Record<string, { bid: number; ask: number }>> {
+  const { json } = await fetchJson(`${STRIKE_PRICE_URL}/v2/ticker/bookTicker`, { weight: READ_WEIGHT, bucket: strikeBucket });
+  const rows = BookTickerSchema.parse(json);
+  return Object.fromEntries(rows.map((r) => [r.symbol, { bid: r.bidPrice, ask: r.askPrice }]));
+}

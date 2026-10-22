@@ -42,6 +42,16 @@ describe("paper record", () => {
   });
 });
 
+describe("paper fills", () => {
+  it("fills at Strike's mid and books the mid-to-mark difference; uses each market's minimum", () => {
+    const a: SnapshotInput = { id: 1, ts: Date.UTC(2026, 9, 22, 12, 0), marks: { "ETH-USD": { mark: 2000, funding: null, mid: 1990, minNotional: 10 } }, gaps: { "ETH-USD": 1 }, members: [] };
+    const [p] = paperRecord([a], rules);
+    expect(p!.positions["ETH-USD"]).toBeCloseTo((5000 / 1990) * 2000);
+    expect(p!.equity).toBeCloseTo(10_000 + (5000 / 1990) * 10 + 0.25);
+    expect(computeTargets({ A: 1, B: 0.3 }, 20, rules, (s) => (s === "B" ? 10 : 5))).toEqual({ A: 20 });
+  });
+});
+
 describe("scoreboard", () => {
   it("marks each crowd's positions to Strike's next mark", () => {
     const m = (crowd: "copy" | "fade", member: string, notional: number) => ({ crowd, member, symbol: "ETH-USD", notional });

@@ -4,7 +4,7 @@ export interface SnapshotInput {
   id: number;
   ts: number;
   /** Strike mark and hourly funding rate per market at this snapshot. */
-  marks: Record<string, { mark: number; funding: number | null }>;
+  marks: Record<string, { mark: number; funding: number | null; mid?: number | null; minNotional?: number | null }>;
   /** Tradable gaps only (gap ≠ 0). */
   gaps: Record<string, number>;
   /** Signed notional per member and market: key `${crowd}|${member}|${symbol}`. */
@@ -84,18 +84,21 @@ export function paperRecord(snaps: SnapshotInput[], rules: Rules, startEquity = 
     }
     const isRebalance = !prev || Math.floor(s.ts / every) > Math.floor(prev.ts / every);
     if (isRebalance) {
-      const targets = computeTargets(s.gaps, equity, rules, () => 5);
+      const targets = computeTargets(s.gaps, equity, rules, (sym) => s.marks[sym]?.minNotional ?? 5);
       const symbols = new Set([...Object.keys(units), ...Object.keys(targets)]);
       for (const sym of symbols) {
         const mark = s.marks[sym]?.mark;
         if (!mark) continue;
+        // Fills at Strike's mid when the snapshot stored a book; snapshots before 2026-10-22 13:40 UTC used the mark.
+        const fillPx = s.marks[sym]?.mid ?? mark;
         const cur = (units[sym] ?? 0) * mark;
         const tgt = targets[sym] ?? 0;
         const delta = tgt - cur;
-        const band = Math.max(5, rules.rebalance_band_fraction * Math.abs(tgt));
+        const band = Math.max(s.marks[sym]?.minNotional ?? 5, rules.rebalance_band_fraction * Math.abs(tgt));
         if (Math.abs(delta) < band && tgt !== 0) continue;
         if (delta === 0) continue;
-        units[sym] = (units[sym] ?? 0) + delta / mark;
+        units[sym] = (units[sym] ?? 0) + delta / fillPx;
+        equity += (delta / fillPx) * (mark - fillPx);
         if (Math.abs(units[sym]!) < 1e-12) delete units[sym];
         turnover += Math.abs(delta);
         const fee = Math.abs(delta) * MAKER_FEE;

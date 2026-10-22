@@ -28,6 +28,16 @@ for (const [c, s] of Object.entries(XYZ_RENAMED)) TABLE.set(`xyz:${c}`, `${s}-US
 TABLE.set("io:SNDK", "SNDK-USD");
 TABLE.set("io:DRAM", "DRAM-USD");
 
+/**
+ * Mapping versions, recorded on every snapshot so old snapshots replay with the table they used.
+ * v1 (record start → snapshot 11): main, xyz, cash; WTI from cash:WTI (a different contract).
+ * v2 (snapshots 12–22): main, xyz; WTI from xyz:CL.
+ * v3 (snapshot 23 →): main, xyz, io; adds io:SNDK and io:DRAM.
+ */
+export const MAPPING_VERSION = 3;
+/** Markets whose rows are not comparable under a given mapping version and are left out of records. */
+export const MAPPING_EXCLUDED: Record<number, string[]> = { 1: ["WTI-USD"], 2: [], 3: [] };
+
 /** Markets with no Hyperliquid source; their crowds come from Strike traders only. */
 export const STRIKE_ONLY_MARKETS = ["NIGHT-USD"];
 
