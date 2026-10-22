@@ -1,0 +1,111 @@
+import { useEffect, useState } from "preact/hooks";
+
+export interface Side {
+  long: number;
+  short: number;
+  lean: number;
+  n: number;
+}
+
+export interface Market {
+  symbol: string;
+  copy: Side;
+  fade: Side;
+  gap: number;
+  tradable: boolean;
+  reason: "two_crowds" | "copy_only" | "fade_only" | "none";
+  mark: number | null;
+  funding_rate: number | null;
+  bid: number | null;
+  ask: number | null;
+  position: {
+    live: { side: "long" | "short" | "flat"; notional: number };
+    model: { side: "long" | "short" | "flat"; notional: number };
+  };
+}
+
+export interface TugReply {
+  network: string;
+  snapshot: { id: number; at: number; finished_at: number | null; read_copy: number | null; read_fade: number | null };
+  rules: { version: number; sha256: string; record_start: number };
+  crowds: { id: number; pulled_at: number; copy_count: number; fade_count: number; member_hash: string } | null;
+  model: { equity: number; start_equity: number; at: number } | null;
+  live: { trading: boolean; account: string | null };
+  markets: Market[];
+}
+
+export interface MemberRow {
+  id: string;
+  notional: number;
+  score: number | null;
+}
+
+export interface MarketReply {
+  snapshot: { id: number; at: number };
+  market: Market;
+  top: { copy: MemberRow[]; fade: MemberRow[] };
+  strike: { copy: MemberRow[]; fade: { n: number; net: number } };
+  history: Array<{ at: number; lean_copy: number; lean_fade: number; gap: number }>;
+}
+
+export interface StatusReply {
+  now: number;
+  engine: { started_at: number; revision: string; rules_sha256: string };
+  recorder: {
+    last_complete: { id: number; at: number; finished_at: number | null; read_copy: number | null; read_fade: number | null } | null;
+    recent: Array<{ id: number; at: number; status: string; errors: number }>;
+  };
+  crowds: { id: number; pulled_at: number; copy_count: number; fade_count: number } | null;
+  trading: { mainnet: "on" | "off"; kill_switch: { mainnet: "on" | "off"; testnet: "on" | "off" } };
+  orders: {
+    open: Record<string, number>;
+    recent: Array<{ client_order_id: string; network: string; order_id: number | null; symbol: string; side: string; price: string; size: string; status: string; placed_at: number; updated_at: number }>;
+  };
+  errors_24h: { warn: number; error: number; recent: Array<{ ts: number; component: string; level: string; code: string | null; message: string }> };
+}
+
+export type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ok"; data: T };
+
+/** Fetches JSON from the engine's public API and refreshes it on an interval. */
+export function useApi<T>(path: string, refreshMs = 60_000): Load<T> {
+  const [load, setLoad] = useState<Load<T>>({ state: "loading" });
+  useEffect(() => {
+    let alive = true;
+    const get = async () => {
+      try {
+        const res = await fetch(path, { headers: { accept: "application/json" } });
+        const body = await res.json();
+        if (!alive) return;
+        if (!res.ok) setLoad({ state: "error", message: body?.message ?? `The API replied ${res.status}.` });
+        else setLoad({ state: "ok", data: body as T });
+      } catch {
+        if (alive) setLoad((l) => (l.state === "ok" ? l : { state: "error", message: "The API could not be reached. Retrying every minute." }));
+      }
+    };
+    void get();
+    const t = setInterval(get, refreshMs);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [path, refreshMs]);
+  return load;
+}
+
+export const usd = (v: number) => {
+  const a = Math.abs(v);
+  const s = a >= 1e9 ? `${(a / 1e9).toFixed(2)}B` : a >= 1e6 ? `${(a / 1e6).toFixed(2)}M` : a >= 1e3 ? `${(a / 1e3).toFixed(1)}k` : a.toFixed(a < 10 ? 2 : 0);
+  return `${v < 0 ? "−" : ""}$${s}`;
+};
+
+export const signed = (v: number, digits = 2) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(digits)}`;
+
+export function ago(ts: number, now = Date.now()): string {
+  const s = Math.max(0, Math.round((now - ts) / 1000));
+  if (s < 60) return `${s} s ago`;
+  const m = Math.round(s / 60);
+  if (m < 90) return `${m} min ago`;
+  return `${(m / 60).toFixed(1)} h ago`;
+}
+
+export const time = (ts: number) => new Date(ts).toISOString().slice(11, 16) + " UTC";

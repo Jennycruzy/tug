@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@fastify/cors": "^11.0.0",
+    "@fastify/rate-limit": "^10.2.1",
     "@tug/core": "workspace:*",
     "@tug/hl": "workspace:*",
     "@tug/strike": "workspace:*",

@@ -7,10 +7,13 @@
     "node": ">=22"
   },
   "scripts": {
-    "typecheck": "tsc -b packages/core packages/hl packages/strike apps/engine",
+    "typecheck": "tsc -b packages/core packages/hl packages/strike apps/engine && tsc -p apps/web",
     "test": "vitest run",
     "engine": "tsx apps/engine/src/main.ts",
-    "rules:hash": "tsx packages/core/src/cli/rulesHash.ts"
+    "rules:hash": "tsx packages/core/src/cli/rulesHash.ts",
+    "order:rest": "tsx apps/engine/src/cli/order.ts",
+    "kill": "tsx apps/engine/src/cli/kill.ts",
+    "web:build": "pnpm --filter @tug/web build"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",

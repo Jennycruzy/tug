@@ -1,0 +1,13 @@
+{
+  "name": "@tug/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "preact": "^10.26.4",
+    "preact-iso": "^2.9.1"
+  }
+}

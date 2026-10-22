@@ -78,6 +78,12 @@ const MarketSchema = z
     index_price: num.optional(),
     funding_rate: num.optional(),
     order_min_notional: num.optional(),
+    /** Kept as strings: rounding needs the exact decimals Strike publishes. */
+    order_tick_price: z.string().optional(),
+    order_limit_step_size: z.string().optional(),
+    order_limit_price_bound: num.optional(),
+    bid1_price: num.optional(),
+    ask1_price: num.optional(),
   })
   .passthrough();
 export type StrikeMarket = z.infer<typeof MarketSchema>;
@@ -95,3 +101,5 @@ export async function bookTickers(): Promise<Record<string, { bid: number; ask: 
   const rows = BookTickerSchema.parse(json);
   return Object.fromEntries(rows.map((r) => [r.symbol, { bid: r.bidPrice, ask: r.askPrice }]));
 }
+
+export * from "./signed.js";

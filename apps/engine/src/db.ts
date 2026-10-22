@@ -97,6 +97,30 @@ CREATE TABLE IF NOT EXISTS events (
   data_json TEXT
 );
 CREATE INDEX IF NOT EXISTS events_ts ON events(ts);
+CREATE TABLE IF NOT EXISTS orders (
+  client_order_id TEXT PRIMARY KEY,
+  network TEXT NOT NULL,
+  order_id INTEGER,
+  symbol TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('buy','sell')),
+  price TEXT NOT NULL,
+  size TEXT NOT NULL,
+  post_only INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL,
+  placed_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS strike_calls (
+  id INTEGER PRIMARY KEY,
+  network TEXT NOT NULL,
+  ts INTEGER NOT NULL,
+  method TEXT NOT NULL,
+  path TEXT NOT NULL,
+  body TEXT,
+  status INTEGER,
+  reply TEXT
+);
 `;
 
 export function openDb(path: string): Db {

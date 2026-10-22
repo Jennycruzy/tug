@@ -1,7 +1,8 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertPublished, loadRules, setHttpEventSink, type Fingerprint } from "@tug/core";
-import { BUSY_FILE, DB_FILE, NETWORK, RAW_DIR, REVISION, ROOT, RULES_FILE } from "./config.js";
+import { startApi } from "./api.js";
+import { API_PORT, BUSY_FILE, DB_FILE, NETWORK, RAW_DIR, REVISION, ROOT, RULES_FILE } from "./config.js";
 import { buildCrowds, loadLatestCrowds, type CrowdVersion } from "./crowds.js";
 import { logEvent, openDb } from "./db.js";
 import { takeSnapshot } from "./recorder.js";
@@ -94,6 +95,13 @@ try {
 }
 rebuildRecords(db, rules, recordStartMs, NETWORK);
 scheduleAligned();
+
+// The mainnet instance serves the public API; the site reads only from it.
+if (NETWORK === "mainnet") {
+  const api = await startApi(db, { network: NETWORK, rulesSha256: fp.sha256, rulesVersion: fp.version, recordStartMs, revision: REVISION }, API_PORT);
+  log("api listening", { port: API_PORT });
+  process.on("exit", () => void api.close());
+}
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => {
