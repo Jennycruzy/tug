@@ -117,6 +117,36 @@ CREATE TABLE IF NOT EXISTS targets (
   target_usd REAL NOT NULL,
   PRIMARY KEY (snapshot_id, symbol)
 );
+CREATE TABLE IF NOT EXISTS user_frames (
+  network TEXT NOT NULL,
+  ts INTEGER NOT NULL,
+  raw TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS user_frames_ts ON user_frames(ts);
+CREATE TABLE IF NOT EXISTS live_equity (
+  network TEXT NOT NULL,
+  ts INTEGER NOT NULL,
+  equity REAL NOT NULL,
+  positions_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS live_equity_ts ON live_equity(network, ts);
+CREATE TABLE IF NOT EXISTS fills (
+  network TEXT NOT NULL,
+  fill_id INTEGER NOT NULL,
+  trade_id INTEGER NOT NULL,
+  order_id INTEGER,
+  client_order_id TEXT,
+  symbol TEXT NOT NULL,
+  side TEXT NOT NULL,
+  role TEXT,
+  price REAL NOT NULL,
+  size REAL NOT NULL,
+  fee REAL NOT NULL,
+  realized_pnl REAL NOT NULL,
+  ts INTEGER NOT NULL,
+  raw TEXT NOT NULL,
+  PRIMARY KEY (network, fill_id)
+);
 CREATE TABLE IF NOT EXISTS records_json (
   name TEXT PRIMARY KEY,
   computed_at INTEGER NOT NULL,

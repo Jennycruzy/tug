@@ -16,6 +16,9 @@
     "replay": "tsx apps/engine/src/cli/replay.ts",
     "backfill:sizes": "tsx apps/engine/src/cli/backfill-sizes.ts",
     "site:check": "tsx apps/web/test/site-check.ts",
+    "exec:check": "tsx apps/engine/src/cli/exec-check.ts",
+    "liquidity": "tsx apps/engine/src/testnetLiquidity.ts",
+    "trader": "tsx apps/engine/src/trader-main.ts",
     "web:build": "pnpm --filter @tug/web build"
   },
   "devDependencies": {

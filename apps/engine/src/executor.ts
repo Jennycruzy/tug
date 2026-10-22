@@ -33,7 +33,7 @@ export class Executor {
     private readonly db: Db,
     private readonly client: StrikeSigned,
     readonly network: string,
-    private readonly opts: { trading: boolean; killFile: string },
+    private readonly opts: { trading: boolean; killFile: string; pollMs?: number },
   ) {}
 
   isKilled(): boolean {
@@ -88,7 +88,7 @@ export class Executor {
     }
     const path = `/v2/order?symbol=${encodeURIComponent(o.symbol)}&client_order_id=${encodeURIComponent(o.clientOrderId)}`;
     for (let i = 0; i < 10; i++) {
-      await sleep(3_000);
+      await sleep(this.opts.pollMs ?? 3_000);
       const r = await this.client.call("GET", path);
       if (r.status === 200) {
         this.db
@@ -105,6 +105,60 @@ export class Executor {
     this.setStatus(o.clientOrderId, "dropped");
     logEvent(this.db, "executor", "error", "Strike accepted the order but it never appeared.", "E-DROPPED", { clientOrderId: o.clientOrderId });
     throw new TugError("E-DROPPED", "Strike accepted the order but it never appeared within 30 seconds.");
+  }
+
+  /** The account's equity and margin as Strike reports them (cross margin balance includes unrealised PnL). */
+  async account(): Promise<{ accountId: string; equity: number; available: number; maintenanceMargin: number; marginRatio: number; raw: unknown }> {
+    const r = await this.call("GET", "/v2/account");
+    const a = r.json as Record<string, string>;
+    const equity = Number(a.margin_balance);
+    const maintenance = Number(a.maintenance_margin ?? 0);
+    if (!Number.isFinite(equity)) throw new TugError("E-STRIKE", "Strike's account reply has no margin_balance.");
+    return { accountId: a.account_id!, equity, available: Number(a.available_balance), maintenanceMargin: maintenance, marginRatio: equity > 0 ? maintenance / equity : 1, raw: a };
+  }
+
+  /** Open positions: signed size (base units) per market. */
+  async positions(): Promise<Record<string, { size: string; entry: number; upnl: number }>> {
+    const r = await this.call("GET", "/v2/positions");
+    const list = ((r.json as { positions?: Array<Record<string, string>> | null }).positions ?? []) as Array<Record<string, string>>;
+    return Object.fromEntries(list.filter((p) => Number(p.size) !== 0).map((p) => [p.symbol!, { size: String(p.size), entry: Number(p.entry_price), upnl: Number(p.upnl) }]));
+  }
+
+  /**
+   * A risk exit (§9.7): a reduce-only market order closing the whole position. The only order TUG ever
+   * sends that takes liquidity; allowed while trading is paused or killed, because it only removes risk.
+   */
+  /** A signed read whose request and reply are stored like every other call. */
+  async read(path: string): Promise<unknown> {
+    return (await this.call("GET", path)).json;
+  }
+
+  async riskExit(symbol: string, clientOrderId: string, reason: string, size?: string): Promise<unknown> {
+    this.db
+      .prepare(
+        "INSERT INTO orders (client_order_id, network, symbol, side, price, size, post_only, reason, status, placed_at, updated_at) VALUES (?,?,?,?,?,?,0,?,'sent',?,?)",
+      )
+      .run(clientOrderId, this.network, symbol, "sell", "market", "position", `Risk exit: ${reason}`, Date.now(), Date.now());
+    const held = (await this.positions())[symbol];
+    if (!held) {
+      this.setStatus(clientOrderId, "not_needed");
+      return { symbol, flat: true };
+    }
+    const side = Number(held.size) > 0 ? "sell" : "buy";
+    this.db.prepare("UPDATE orders SET side=? WHERE client_order_id=?").run(side, clientOrderId);
+    // The whole position closes with close_position; a partial reduction sends its own size, reduce-only.
+    const r = await this.call("POST", "/v2/order", {
+      symbol,
+      side,
+      type: "market",
+      size: size ?? held.size.replace("-", ""),
+      reduce_only: true,
+      ...(size ? {} : { close_position: true }),
+      client_order_id: clientOrderId,
+    });
+    this.setStatus(clientOrderId, "pending");
+    logEvent(this.db, "executor", "warn", `risk exit ${symbol}: ${reason}`, "E-STOP", { symbol, side, size: held.size });
+    return r.json;
   }
 
   async openOrders(symbol: string): Promise<OpenOrder[]> {

@@ -103,3 +103,5 @@ export async function bookTickers(): Promise<Record<string, { bid: number; ask: 
 }
 
 export * from "./signed.js";
+export * from "./userFrames.js";
+export * from "./userStream.js";

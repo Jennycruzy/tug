@@ -29,6 +29,7 @@ export const PUBLIC_SENTENCES: Record<string, string> = {
   "E-KILL-LEFT": "The kill switch ran but orders were still open afterwards.",
   "E-TRADING-OFF": "Trading is off; no order was placed.",
   "E-KEY": "An account key is missing; nothing was signed.",
+  "E-WS": "The account's live connection to Strike dropped; it reconnects and re-reads the account.",
 };
 
 export const UNKNOWN_EVENT_SENTENCE = "The engine logged a warning.";
