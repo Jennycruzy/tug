@@ -24,8 +24,9 @@ export function Rope({ m }: { m: Market }) {
 }
 
 export function ropeLabel(m: Market): string {
-  const side = (lean: number) => (lean > 0 ? `long ${Math.round(lean * 100)}%` : lean < 0 ? `short ${Math.round(-lean * 100)}%` : "even");
-  return `${m.symbol}: copy picks ${side(m.copy.lean)} (${m.copy.n}), fade picks ${side(m.fade.lean)} (${m.fade.n}), gap ${m.gap.toFixed(2)}`;
+  const side = (s: { lean: number; n: number }) =>
+    s.n === 0 ? "none holding" : `${s.lean > 0 ? `long ${Math.round(s.lean * 100)}%` : s.lean < 0 ? `short ${Math.round(-s.lean * 100)}%` : "even"} (${s.n})`;
+  return `${m.symbol}: copy picks ${side(m.copy)}, fade picks ${side(m.fade)}, gap ${m.gap.toFixed(2)}`;
 }
 
 export const net = (s: { long: number; short: number }) => s.long - s.short;
