@@ -1,17 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertPublished, loadRules, setHttpEventSink, type Fingerprint } from "@tug/core";
+import { BUSY_FILE, DB_FILE, NETWORK, RAW_DIR, REVISION, ROOT, RULES_FILE } from "./config.js";
 import { buildCrowds, loadLatestCrowds, type CrowdVersion } from "./crowds.js";
 import { logEvent, openDb } from "./db.js";
 import { takeSnapshot } from "./recorder.js";
 import { rebuildRecords } from "./records.js";
-
-const ROOT = process.env.TUG_ROOT ?? process.cwd();
-const NETWORK = process.env.TUG_NETWORK ?? "mainnet";
-const RULES_FILE = process.env.TUG_RULES_FILE ?? join(ROOT, "rules/tug-rules-v1.json");
-const DB_FILE = process.env.TUG_DB ?? join(ROOT, "data/tug.db");
-const RAW_DIR = process.env.TUG_RAW_DIR ?? join(ROOT, "data/raw");
-const REVISION = existsSync(join(ROOT, "REVISION")) ? readFileSync(join(ROOT, "REVISION"), "utf8").trim() : "unknown";
 
 interface PublishedFingerprint extends Fingerprint {
   record_start?: string;
@@ -37,6 +31,8 @@ setHttpEventSink((e) => logEvent(db, "http", "warn", "A data source asked us to 
 log("engine start", { rules: fp.sha256, version: fp.version, record_start: fp.record_start, network: NETWORK, revision: REVISION });
 logEvent(db, "engine", "info", "engine start", undefined, { rules: fp.sha256, network: NETWORK, revision: REVISION });
 
+rmSync(BUSY_FILE, { force: true });
+
 let crowd: CrowdVersion | undefined = loadLatestCrowds(db);
 let running = false;
 
@@ -60,6 +56,8 @@ async function cycle(): Promise<void> {
     return;
   }
   running = true;
+  // The deploy script restarts the engine only while this file is absent (crowd refresh and snapshot both count).
+  writeFileSync(BUSY_FILE, String(Date.now()));
   try {
     await ensureCrowds();
     const periodMs = rules.snapshot_every_minutes * 60_000;
@@ -72,6 +70,7 @@ async function cycle(): Promise<void> {
     logEvent(db, "engine", "error", (e as Error).message, (e as { code?: string }).code ?? "E-CYCLE");
   } finally {
     running = false;
+    rmSync(BUSY_FILE, { force: true });
   }
 }
 
@@ -85,10 +84,13 @@ function scheduleAligned(): void {
   }, wait);
 }
 
+writeFileSync(BUSY_FILE, String(Date.now()));
 try {
   await ensureCrowds();
 } catch (e) {
   log("crowd refresh failed", { error: (e as Error).message });
+} finally {
+  rmSync(BUSY_FILE, { force: true });
 }
 rebuildRecords(db, rules, recordStartMs, NETWORK);
 scheduleAligned();

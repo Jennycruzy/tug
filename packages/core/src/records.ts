@@ -52,8 +52,9 @@ export interface PaperPoint {
 
 /**
  * The paper record (labelled MODEL): $10,000 following the targets at every rebalance, filled at
- * Strike's mark with the maker fee, plus Strike's hourly funding. Deterministic replay of stored
- * snapshots.
+ * Strike's mid (best bid and ask stored with the snapshot; the mark when no book was stored) with the
+ * maker fee, marked to Strike's mark, plus Strike's hourly funding. Each market's own minimum notional
+ * applies. Deterministic replay of stored snapshots.
  */
 export function paperRecord(snaps: SnapshotInput[], rules: Rules, startEquity = 10_000): PaperPoint[] {
   const out: PaperPoint[] = [];

@@ -59,7 +59,11 @@ export async function takeSnapshot(
   );
 
   const { markets } = await strikeMarkets();
-  const books = await bookTickers().catch(() => ({}) as Record<string, { bid: number; ask: number }>);
+  const books = await bookTickers().catch((e: Error) => {
+    // The paper record falls back to the mark for this snapshot; say so instead of hiding it.
+    logEvent(db, "recorder", "warn", `Strike's best bid and ask could not be read; paper fills use the mark this snapshot: ${e.message}`, "E-BOOK", { snapshot: snapId });
+    return {} as Record<string, { bid: number; ask: number }>;
+  });
   const marks: Record<string, number> = {};
   for (const [sym, m] of Object.entries(markets)) if (m.mark_price && m.mark_price > 0) marks[sym] = m.mark_price;
 

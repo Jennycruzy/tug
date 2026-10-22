@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  MAPPING_FINGERPRINTS,
+  MAPPING_VERSION,
   RulesSchema,
   WeightBucket,
   allMappedMarkets,
@@ -8,6 +10,7 @@ import {
   checkMapping,
   computeLeans,
   loadRules,
+  mappingTableFingerprint,
   rulesFingerprint,
   strikeMarketForHlCoin,
   type PositionRow,
@@ -116,5 +119,14 @@ describe("bucket", () => {
     await b.take(60);
     await b.take(30);
     expect(waits.reduce((a, c) => a + c, 0)).toBeGreaterThanOrEqual(30_000);
+  });
+});
+
+describe("mapping version", () => {
+  it("the mapping table matches the fingerprint recorded for the current MAPPING_VERSION", () => {
+    // A changed table needs a new MAPPING_VERSION (stored on every snapshot) and its fingerprint here.
+    expect(mappingTableFingerprint(), "mapping table changed: bump MAPPING_VERSION and record its fingerprint").toBe(
+      MAPPING_FINGERPRINTS[MAPPING_VERSION],
+    );
   });
 });
