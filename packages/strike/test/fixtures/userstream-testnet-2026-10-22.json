@@ -1,0 +1,384 @@
+{
+ "meta": {
+  "server": "wss://api-v2-testnet.strikefinance.org/ws/user-api",
+  "captured_at": "2026-10-22T14:05:02Z",
+  "request": "each socket: session.logon, subscribe userstream, subscribe userstream with vault_id. Socket B never answers pings. Actions: vault deposit of 10 USD, 170 s idle, client drop of A, new socket A2 logs on and subscribes again, post-only order then cancel.",
+  "source": "probes/out/a12-complete-2026-10-22T14-05-02-374Z.json (server, private)"
+ },
+ "frames": [
+  {
+   "t": "2026-10-22T14:05:02.734Z",
+   "socket": "B",
+   "event": "open",
+   "data": ""
+  },
+  {
+   "t": "2026-10-22T14:05:02.886Z",
+   "socket": "B",
+   "frame": {
+    "id": 1,
+    "result": {
+     "account_id": "01a163bf-fb0a-77b0-86c0-03a62889ee01",
+     "authenticated": true
+    },
+    "status": 200
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:02.989Z",
+   "socket": "B",
+   "frame": {
+    "id": 2,
+    "result": null
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:02.991Z",
+   "socket": "B",
+   "frame": {
+    "id": 3,
+    "result": null
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:03.361Z",
+   "socket": "A",
+   "event": "open",
+   "data": ""
+  },
+  {
+   "t": "2026-10-22T14:05:03.474Z",
+   "socket": "A",
+   "frame": {
+    "id": 1,
+    "result": {
+     "account_id": "01a163bf-fb0a-77b0-86c0-03a62889ee01",
+     "authenticated": true
+    },
+    "status": 200
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:03.577Z",
+   "socket": "A",
+   "frame": {
+    "id": 2,
+    "result": null
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:03.577Z",
+   "socket": "A",
+   "frame": {
+    "id": 3,
+    "result": null
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:06.959Z",
+   "socket": "B",
+   "frame": {
+    "e": "ACCOUNT_UPDATE",
+    "E": 1792677906908,
+    "data": {
+     "event_type": "VAULT_DEPOSITED",
+     "event_data": {
+      "request_id": "e1f33db5-39b9-45d4-8424-df20509faacc",
+      "vault_id": "d7e255eb-509f-5cd7-8e15-ab95ef639c3f",
+      "vault_name": "TUG",
+      "usd_amount": "10",
+      "share_price": "1",
+      "shares": "10",
+      "timestamp": 1792677906855,
+      "account_id": "01a163bf-fb0a-77b0-86c0-03a62889ee01"
+     }
+    }
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:06.959Z",
+   "socket": "B",
+   "frame": {
+    "e": "ACCOUNT_UPDATE",
+    "E": 1792677906908,
+    "data": {
+     "e": "ACCOUNT_UPDATE",
+     "B": [
+      {
+       "a": "USDT",
+       "wb": "866.896678",
+       "cw": "866.896678",
+       "bc": "0"
+      }
+     ],
+     "P": [],
+     "r": "VAULT_DEPOSIT",
+     "E": 1792677906908,
+     "T": 1792677906908
+    }
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:06.959Z",
+   "socket": "B",
+   "frame": {
+    "e": "ACCOUNT_UPDATE",
+    "E": 1792677906908,
+    "data": {
+     "e": "ACCOUNT_UPDATE",
+     "B": [
+      {
+       "a": "USDT",
+       "wb": "210",
+       "cw": "210",
+       "bc": "0"
+      }
+     ],
+     "P": [],
+     "r": "VAULT_DEPOSIT_RECEIVED",
+     "E": 1792677906908,
+     "T": 1792677906908
+    }
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:06.960Z",
+   "socket": "A",
+   "frame": {
+    "e": "ACCOUNT_UPDATE",
+    "E": 1792677906908,
+    "data": {
+     "event_type": "VAULT_DEPOSITED",
+     "event_data": {
+      "request_id": "e1f33db5-39b9-45d4-8424-df20509faacc",
+      "vault_id": "d7e255eb-509f-5cd7-8e15-ab95ef639c3f",
+      "vault_name": "TUG",
+      "usd_amount": "10",
+      "share_price": "1",
+      "shares": "10",
+      "timestamp": 1792677906855,
+      "account_id": "01a163bf-fb0a-77b0-86c0-03a62889ee01"
+     }
+    }
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:06.961Z",
+   "socket": "A",
+   "frame": {
+    "e": "ACCOUNT_UPDATE",
+    "E": 1792677906908,
+    "data": {
+     "e": "ACCOUNT_UPDATE",
+     "B": [
+      {
+       "a": "USDT",
+       "wb": "866.896678",
+       "cw": "866.896678",
+       "bc": "0"
+      }
+     ],
+     "P": [],
+     "r": "VAULT_DEPOSIT",
+     "E": 1792677906908,
+     "T": 1792677906908
+    }
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:06.961Z",
+   "socket": "A",
+   "frame": {
+    "e": "ACCOUNT_UPDATE",
+    "E": 1792677906908,
+    "data": {
+     "e": "ACCOUNT_UPDATE",
+     "B": [
+      {
+       "a": "USDT",
+       "wb": "210",
+       "cw": "210",
+       "bc": "0"
+      }
+     ],
+     "P": [],
+     "r": "VAULT_DEPOSIT_RECEIVED",
+     "E": 1792677906908,
+     "T": 1792677906908
+    }
+   }
+  },
+  {
+   "t": "2026-10-22T14:05:56.732Z",
+   "socket": "B",
+   "event": "ping frame",
+   "data": "+54.3 s since open"
+  },
+  {
+   "t": "2026-10-22T14:05:57.361Z",
+   "socket": "A",
+   "event": "ping frame",
+   "data": "+54.4 s since open"
+  },
+  {
+   "t": "2026-10-22T14:06:02.733Z",
+   "socket": "B",
+   "event": "close",
+   "data": {
+    "code": 1006,
+    "reason": "",
+    "afterSeconds": 60.346
+   }
+  },
+  {
+   "t": "2026-10-22T14:06:51.361Z",
+   "socket": "A",
+   "event": "ping frame",
+   "data": "+108.4 s since open"
+  },
+  {
+   "t": "2026-10-22T14:07:45.362Z",
+   "socket": "A",
+   "event": "ping frame",
+   "data": "+162.4 s since open"
+  },
+  {
+   "t": "2026-10-22T14:08:17.260Z",
+   "socket": "A",
+   "event": "close",
+   "data": {
+    "code": 1006,
+    "reason": "",
+    "afterSeconds": 194.267
+   }
+  },
+  {
+   "t": "2026-10-22T14:08:18.615Z",
+   "socket": "A2",
+   "event": "open",
+   "data": ""
+  },
+  {
+   "t": "2026-10-22T14:08:18.721Z",
+   "socket": "A2",
+   "frame": {
+    "id": 1,
+    "result": {
+     "account_id": "01a163bf-fb0a-77b0-86c0-03a62889ee01",
+     "authenticated": true
+    },
+    "status": 200
+   }
+  },
+  {
+   "t": "2026-10-22T14:08:18.826Z",
+   "socket": "A2",
+   "frame": {
+    "id": 2,
+    "result": null
+   }
+  },
+  {
+   "t": "2026-10-22T14:08:18.826Z",
+   "socket": "A2",
+   "frame": {
+    "id": 3,
+    "result": null
+   }
+  },
+  {
+   "t": "2026-10-22T14:08:19.346Z",
+   "socket": "A2",
+   "frame": {
+    "e": "ORDER_TRADE_UPDATE",
+    "E": 1792678099296,
+    "data": {
+     "s": "ETH-USD",
+     "c": "tug-v1-testnet-reconnect-ETH-USD-1792678098981",
+     "S": "BUY",
+     "o": "LIMIT",
+     "f": "GTC",
+     "q": "0.0060",
+     "p": "2378.68",
+     "ap": "",
+     "sp": "0",
+     "x": "TRADE",
+     "X": "OPEN",
+     "i": 243143041,
+     "cr": "",
+     "l": "",
+     "z": "0",
+     "L": "",
+     "N": "",
+     "n": "",
+     "ott": 1792678099244,
+     "t": 0,
+     "b": "",
+     "a": "",
+     "m": false,
+     "R": false,
+     "wt": "",
+     "ot": "LIMIT",
+     "ps": "",
+     "cp": false,
+     "rp": "",
+     "act": "",
+     "E": 1792678099296,
+     "T": 1792678099244
+    }
+   }
+  },
+  {
+   "t": "2026-10-22T14:08:23.488Z",
+   "socket": "A2",
+   "frame": {
+    "e": "ORDER_TRADE_UPDATE",
+    "E": 1792678103436,
+    "data": {
+     "s": "ETH-USD",
+     "c": "tug-v1-testnet-reconnect-ETH-USD-1792678098981",
+     "S": "BUY",
+     "o": "LIMIT",
+     "f": "GTC",
+     "q": "0.0060",
+     "p": "2378.68",
+     "ap": "",
+     "sp": "0",
+     "x": "CANCELED",
+     "X": "CANCELED",
+     "i": 243143041,
+     "cr": "",
+     "l": "",
+     "z": "0",
+     "L": "",
+     "N": "",
+     "n": "",
+     "ott": 1792678103384,
+     "t": 0,
+     "b": "",
+     "a": "",
+     "m": false,
+     "R": false,
+     "wt": "",
+     "ot": "LIMIT",
+     "ps": "",
+     "cp": false,
+     "rp": "",
+     "act": "",
+     "E": 1792678103436,
+     "T": 1792678103384
+    }
+   }
+  },
+  {
+   "t": "2026-10-22T14:08:28.548Z",
+   "socket": "A2",
+   "event": "close",
+   "data": {
+    "code": 1005,
+    "reason": "",
+    "afterSeconds": 10.285
+   }
+  }
+ ]
+}
