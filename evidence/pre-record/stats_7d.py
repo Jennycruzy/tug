@@ -1,4 +1,4 @@
-"""Re-compute the 7-day pre-record figures (spec §4.3 M1, M2) from the stored raw fills.
+"""Re-compute the 7-day pre-record figures (copy picks and fade picks, 15-22 Oct) from the stored raw fills.
 Usage: python3 -I stats_7d.py <dir>   (reads plain or .gz JSON)
 Inputs: discover_all.json (Strike /v2/copy/discover pages, 22 Oct), copy_fills7d.json and
 counter_fills7d.json ([address, Hyperliquid userFillsByTime replies] for 15-22 Oct), markets.json (Strike /v2/markets)."""
