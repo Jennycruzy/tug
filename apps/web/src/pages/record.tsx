@@ -269,7 +269,7 @@ function Vault({ v, now }: { v: VaultRecord; now: number }) {
           {v.fills} ({v.maker_fills} as maker)
         </b>
         <span>Fees</span>
-        <b>{v.fills === 0 ? "No fills yet" : v.fees <= 0 ? `${fine(-v.fees)} rebate earned` : `${fine(v.fees)} paid`}</b>
+        <b>{v.fills === 0 ? "No fills yet" : v.fees === 0 ? "$0.00 (no fee on testnet)" : v.fees < 0 ? `${fine(-v.fees)} rebate earned` : `${fine(v.fees)} paid`}</b>
         <span>Leader fee</span>
         <b>{v.leader_fee_bps === null ? "—" : `${v.leader_fee_bps / 100}% of depositors' profit`}</b>
         <span>Updated</span>
