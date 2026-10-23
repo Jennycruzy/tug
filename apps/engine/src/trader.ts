@@ -66,7 +66,11 @@ export class Trader {
         }
       },
       resync: () => void this.syncFills().then(() => this.syncMoney()),
-      status: (s) => logEvent(this.db, "userstream", s.state === "closed" ? "warn" : "info", `user stream ${s.state}`, s.state === "closed" ? "E-WS" : undefined, s),
+      // A close after stop() is TUG closing it (Stop on a connected account, a restart), not a drop.
+      status: (s) => {
+        const drop = s.state === "closed" && !this.stopped;
+        logEvent(this.db, "userstream", drop ? "warn" : "info", `user stream ${s.state}`, drop ? "E-WS" : undefined, s);
+      },
     }, { vaultId: this.cfg.vaultId });
     this.stream.start();
     const every = (ms: number, fn: () => Promise<void>) =>
