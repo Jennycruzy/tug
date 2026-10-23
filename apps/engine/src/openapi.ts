@@ -197,7 +197,16 @@ const schemas: Record<string, Schema> = {
         tug: { type: "object", properties: { turnover: num, fees: num } },
       },
     }),
-    depth_added: { type: "null" },
+    depth_added: obj({
+      network: str,
+      since: nullable(int),
+      minutes_resting: int,
+      markets: arr(obj({ symbol: str, minutes_resting: int, minutes_at_best: int, avg_share_of_best: num, avg_share_of_top5: num })),
+      maker_fills: int,
+      fills: int,
+      maker_volume: num,
+      rebates: num,
+    }),
     evidence: obj({ code: str, data: str }),
   }),
   Status: obj({
@@ -299,7 +308,8 @@ OpenAPI 3.1: https://tug.38-49-216-59.sslip.io/api/openapi.json
 - GET /api/v1/paper: the paper record (MODEL) with the targets of the last rebalance.
 - GET /api/v1/scoreboard: how Strike's copy picks and fade picks did since the record started, per market.
 - GET /api/v1/proof: the rules fingerprint (SHA-256, published before the record started), the market
-  mapping, snapshot counts and fees saved.
+  mapping, snapshot counts, fees saved, and depth added: each minute a TUG order rests on Strike's book, its
+  share of the size at the best price and in the top 5 levels; plus maker fills, maker volume and rebates.
 - GET /api/v1/status: heartbeats, recent snapshots, orders and errors.
 
 ## Words

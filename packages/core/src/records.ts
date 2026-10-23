@@ -15,6 +15,37 @@ export interface SnapshotInput {
   members: Array<{ crowd: "copy" | "fade"; member: string; symbol: string; notional: number; size?: number | null }>;
 }
 
+/** One stored snapshot as rows (the database and the evidence files hold the same columns). */
+export interface SnapshotRows {
+  id: number;
+  started_at: number;
+  crowd_version: number;
+  mapping_version: number | null;
+  marks: Array<{ symbol: string; mark: number; funding_rate: number | null; bid: number | null; ask: number | null; min_notional: number | null }>;
+  /** Tradable leans only. */
+  leans: Array<{ symbol: string; gap: number }>;
+  positions: Array<{ crowd: "copy" | "fade"; platform: string; member_id: string; symbol: string; signed_notional: number; size: number | null }>;
+}
+
+/**
+ * A snapshot's rows as the records' input; markets the snapshot's mapping excluded are left out. Shared by the
+ * engine's records and by `pnpm verify`, so both compute from the same rows the same way.
+ */
+export function snapshotInput(s: SnapshotRows, excludedByMapping: Record<number, string[]>): SnapshotInput {
+  const excluded = new Set(excludedByMapping[s.mapping_version ?? 0] ?? []);
+  return {
+    id: s.id,
+    ts: s.started_at,
+    crowdVersion: s.crowd_version,
+    mappingVersion: s.mapping_version ?? 0,
+    marks: Object.fromEntries(s.marks.map((m) => [m.symbol, { mark: m.mark, funding: m.funding_rate, mid: m.bid && m.ask ? (m.bid + m.ask) / 2 : null, minNotional: m.min_notional }])),
+    gaps: Object.fromEntries(s.leans.filter((g) => !excluded.has(g.symbol)).map((g) => [g.symbol, g.gap])),
+    members: s.positions
+      .filter((p) => !excluded.has(p.symbol))
+      .map((p) => ({ crowd: p.crowd, member: `${p.platform}:${p.member_id}`, symbol: p.symbol, notional: p.signed_notional, size: p.size })),
+  };
+}
+
 export const MAKER_FEE = -0.00005;
 export const TAKER_FEE = 0.0005;
 

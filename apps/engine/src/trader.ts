@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { accountStatusFrom, computeTargets, marketRulesFrom, planOrders, riskCheck, toStep, type Holding, type MarketRules, type RiskAction, type Rules } from "@tug/core";
-import { bookTickers, markets as strikeMarkets, UserStream, vault as strikeVault, vaultHistory, type StrikeMarket } from "@tug/strike";
+import { bookTickers, depth as strikeDepth, markets as strikeMarkets, UserStream, vault as strikeVault, vaultHistory, type StrikeMarket } from "@tug/strike";
 import { logEvent, type Db } from "./db.js";
 import type { Executor } from "./executor.js";
 
@@ -70,6 +70,7 @@ export class Trader {
     every(RISK_EVERY_MS, () => this.riskTick());
     every(TRADE_EVERY_MS, () => this.tradeTick());
     every(60_000, () => this.syncFills().then(() => this.syncMoney()));
+    every(60_000, () => this.sampleDepth());
     void this.readMarkets()
       .then(() => this.leverageForHeld())
       .then(() => this.riskTick())
@@ -309,6 +310,27 @@ export class Trader {
       const price = (o.side === "buy" ? Number(o.price) - tick : Number(o.price) + tick).toFixed(d);
       logEvent(this.db, "trader", "info", "re-quote one tick away", undefined, { symbol: o.symbol, from: o.price, to: price });
       await this.placeWithRequote({ ...o, price }, 1);
+    }
+  }
+
+  /**
+   * Depth added (§9.6.6), each minute: for every TUG order resting on Strike's book, its size, whether it is at
+   * the best price, and the totals at the best price and in the top 5 levels of that side (public book).
+   */
+  async sampleDepth(): Promise<void> {
+    const open = this.db
+      .prepare(
+        "SELECT o.symbol, o.side, o.price, CAST(o.size AS REAL) - COALESCE((SELECT SUM(f.size) FROM fills f WHERE f.network=o.network AND f.client_order_id=o.client_order_id),0) AS size FROM orders o WHERE o.network=? AND o.post_only=1 AND o.status IN ('pending','new','open','partially_filled') AND o.placed_at > ?",
+      )
+      .all(this.cfg.network, Date.now() - 24 * 3600_000) as Array<{ symbol: string; side: "buy" | "sell"; price: string; size: number }>;
+    const ts = Date.now();
+    const ins = this.db.prepare("INSERT OR REPLACE INTO depth_samples (network, ts, symbol, side, price, tug_size, at_best, best_total, top5_total) VALUES (?,?,?,?,?,?,?,?,?)");
+    for (const o of open.filter((x) => x.size > 0)) {
+      const book = await strikeDepth(o.symbol, 5);
+      const levels = o.side === "buy" ? book.bids : book.asks;
+      if (levels.length === 0) continue;
+      const price = Number(o.price);
+      ins.run(this.cfg.network, ts, o.symbol, o.side, price, o.size, Math.abs(levels[0]![0] - price) < 1e-12 ? 1 : 0, levels[0]![1], levels.reduce((a, l) => a + l[1], 0));
     }
   }
 

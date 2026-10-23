@@ -1,7 +1,7 @@
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance } from "fastify";
-import { allMappedMarkets, MAPPING_FINGERPRINTS, MAPPING_VERSION, publicSentence, type FeesSaved } from "@tug/core";
+import { allMappedMarkets, depthSummary, MAPPING_FINGERPRINTS, MAPPING_VERSION, publicSentence, type FeesSaved } from "@tug/core";
 import { ROOT, TRADING, killFileFor } from "./config.js";
 import type { Db } from "./db.js";
 import { existsSync, readFileSync } from "node:fs";
@@ -449,6 +449,25 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
     };
   });
 
+  const depthQ = db.prepare("SELECT ts, symbol, side, tug_size, at_best, best_total, top5_total FROM depth_samples WHERE network=? ORDER BY ts");
+  const makerQ = db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(role='maker'),0) AS maker, COALESCE(SUM(CASE WHEN role='maker' THEN price*size END),0) AS vol, COALESCE(SUM(CASE WHEN fee<0 THEN -fee END),0) AS rebates FROM fills WHERE network=?");
+  /** Depth added on the live account (mainnet): the minute samples summed up, with its maker fills and rebates. */
+  const depthAdded = (network: string) => {
+    const rows = depthQ.all(network) as Array<{ ts: number; symbol: string; side: string; tug_size: number; at_best: number; best_total: number; top5_total: number }>;
+    const d = depthSummary(rows.map((r) => ({ ts: r.ts, symbol: r.symbol, side: r.side, tugSize: r.tug_size, atBest: r.at_best === 1, bestTotal: r.best_total, top5Total: r.top5_total })));
+    const m = makerQ.get(network) as { n: number; maker: number; vol: number; rebates: number };
+    return {
+      network,
+      since: rows[0]?.ts ?? null,
+      minutes_resting: d.minutesResting,
+      markets: d.markets.map((x) => ({ symbol: x.symbol, minutes_resting: x.minutesResting, minutes_at_best: x.minutesAtBest, avg_share_of_best: x.avgShareOfBest, avg_share_of_top5: x.avgShareOfTop5 })),
+      maker_fills: m.maker,
+      fills: m.n,
+      maker_volume: m.vol,
+      rebates: m.rebates,
+    };
+  };
+
   app.get("/api/v1/proof", async () => {
     const fees = recordJsonQ.get("fees_saved") as { computed_at: number; json: string } | undefined;
     const counts = Object.fromEntries((snapCountQ.all(ctx.network, ctx.recordStartMs) as Array<{ status: string; n: number }>).map((r) => [r.status.toLowerCase(), r.n]));
@@ -457,8 +476,8 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
       mapping: { version: MAPPING_VERSION, fingerprint: MAPPING_FINGERPRINTS[MAPPING_VERSION] ?? null, markets_covered: allMappedMarkets().length },
       snapshots_since_record_start: { complete: counts.complete ?? 0, partial: counts.partial ?? 0, interrupted: counts.interrupted ?? 0 },
       fees_saved: fees ? { computed_at: fees.computed_at, ...(JSON.parse(fees.json) as FeesSaved | null ?? {}) } : null,
-      // Depth added is measured while TUG's orders rest on Strike's books.
-      depth_added: null,
+      // Depth added is measured each minute while TUG's orders rest on Strike's books (from 23 Oct, G5).
+      depth_added: depthAdded("mainnet"),
       evidence: { code: "https://github.com/Jennycruzy/tug", data: "https://github.com/Jennycruzy/tug-evidence" },
     };
   });

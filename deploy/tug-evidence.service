@@ -1,0 +1,17 @@
+[Unit]
+Description=TUG evidence push (hourly, data only)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=tug
+Group=tug
+WorkingDirectory=/home/tug/tug
+EnvironmentFile=/home/tug/tug-private/env/mainnet.env
+Environment=TUG_EVIDENCE_REPO_DIR=/home/tug/tug-evidence
+Environment=TUG_EVIDENCE_SALT_FILE=/home/tug/tug-private/keys/evidence-salt
+Environment=TUG_EVIDENCE_PUSH=on
+Nice=15
+ExecStart=/home/tug/tug/node_modules/.bin/tsx apps/engine/src/cli/evidence.ts
+StandardOutput=append:/home/tug/tug-private/logs/evidence.log
+StandardError=append:/home/tug/tug-private/logs/evidence.log

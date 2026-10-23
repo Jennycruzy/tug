@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { loadRules } from "@tug/core";
 import { StrikeSigned } from "@tug/strike";
 import { buildApi } from "../src/api.js";
+import { vaultNetworkError } from "../src/config.js";
 import { Executor } from "../src/executor.js";
 import { Trader } from "../src/trader.js";
 import { OPENAPI } from "../src/openapi.js";
@@ -48,6 +49,29 @@ function vaultTrader() {
   const trader = new Trader(db, ex, rules, { network: "vault", markets: rules.testnet_markets, tradingOn: () => true, pausedFile: "/nonexistent/paused", keyFile: "unused", vaultId: VAULT });
   return { db, ex, trader };
 }
+
+describe("the vault runs on Strike testnet only", () => {
+  it("a vault trader pointed at mainnet, or with no Strike URL (mainnet by default), refuses to start", () => {
+    expect(vaultNetworkError(true, undefined)).toMatch(/testnet/);
+    expect(vaultNetworkError(true, "https://api.strikefinance.org")).toMatch(/testnet/);
+    expect(vaultNetworkError(true, "https://api-v2-testnet.strikefinance.org")).toBeNull();
+    expect(vaultNetworkError(false, "https://api.strikefinance.org")).toBeNull();
+  });
+
+  it("/api/v1/record?network=testnet carries the vault (SPEC §11)", async () => {
+    const { db, trader } = vaultTrader();
+    const io = stub(vaultReplies());
+    try {
+      await trader.syncMoney();
+    } finally {
+      io.restore();
+    }
+    const app = buildApi(db, ctx);
+    const r = await app.inject({ url: "/api/v1/record?network=testnet" });
+    expect(r.json().vault.vault_id).toBe(VAULT);
+    await app.close();
+  });
+});
 
 describe("the executor on a vault (Strike's vault-leader rules)", () => {
   it("every write carries vault_id in the body and every read carries it as a query parameter", async () => {

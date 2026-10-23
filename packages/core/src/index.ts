@@ -7,5 +7,6 @@ export * from "./records.js";
 export * from "./rounding.js";
 export * from "./sentences.js";
 export * from "./sizing.js";
+export * from "./depth.js";
 export * from "./fees.js";
 export * from "./risk.js";

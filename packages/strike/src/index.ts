@@ -102,6 +102,15 @@ export async function bookTickers(): Promise<Record<string, { bid: number; ask: 
   return Object.fromEntries(rows.map((r) => [r.symbol, { bid: r.bidPrice, ask: r.askPrice }]));
 }
 
+const DepthSchema = z.object({ bids: z.array(z.tuple([num, num])), asks: z.array(z.tuple([num, num])) }).passthrough();
+
+/** The top of one market's public order book: [price, size] per level, best first (Strike's price host). */
+export async function depth(symbol: string, limit = 5): Promise<{ bids: Array<[number, number]>; asks: Array<[number, number]> }> {
+  const { json } = await fetchJson(`${STRIKE_PRICE_URL}/v2/depth?symbol=${encodeURIComponent(symbol)}&limit=${limit}`, { weight: READ_WEIGHT, bucket: strikeBucket });
+  const d = DepthSchema.parse(json);
+  return { bids: d.bids, asks: d.asks };
+}
+
 const VaultSchema = z
   .object({ vault_id: z.string(), name: z.string(), status: z.string(), share_price: num, equity: num, total_shares: num })
   .passthrough();

@@ -163,6 +163,18 @@ CREATE TABLE IF NOT EXISTS transfers (
   raw TEXT NOT NULL,
   PRIMARY KEY (network, id)
 );
+CREATE TABLE IF NOT EXISTS depth_samples (
+  network TEXT NOT NULL,
+  ts INTEGER NOT NULL,
+  symbol TEXT NOT NULL,
+  side TEXT NOT NULL,
+  price REAL NOT NULL,
+  tug_size REAL NOT NULL,
+  at_best INTEGER NOT NULL,
+  best_total REAL NOT NULL,
+  top5_total REAL NOT NULL,
+  PRIMARY KEY (network, ts, symbol, side)
+);
 CREATE TABLE IF NOT EXISTS vault_points (
   vault_id TEXT NOT NULL,
   ts INTEGER NOT NULL,

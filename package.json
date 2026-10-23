@@ -19,7 +19,9 @@
     "exec:check": "tsx apps/engine/src/cli/exec-check.ts",
     "liquidity": "tsx apps/engine/src/testnetLiquidity.ts",
     "trader": "tsx apps/engine/src/trader-main.ts",
-    "web:build": "pnpm --filter @tug/web build"
+    "web:build": "pnpm --filter @tug/web build",
+    "evidence": "tsx apps/engine/src/cli/evidence.ts",
+    "verify": "tsx apps/engine/src/cli/verify.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

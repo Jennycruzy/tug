@@ -1,4 +1,4 @@
-import { feesSaved, MAPPING_EXCLUDED, paperRecord, scoreboard, type CopyCrowd, type Rules, type SnapshotInput } from "@tug/core";
+import { feesSaved, MAPPING_EXCLUDED, paperRecord, scoreboard, snapshotInput, type CopyCrowd, type Rules, type SnapshotInput, type SnapshotRows } from "@tug/core";
 import type { Db } from "./db.js";
 
 /** Rebuilds the paper record, its targets, the scoreboard and fees saved from every complete snapshot since the record start. */
@@ -6,31 +6,8 @@ export function rebuildRecords(db: Db, rules: Rules, recordStartMs: number, netw
   const snaps = db
     .prepare("SELECT id, started_at, mapping_version, crowd_version FROM snapshots WHERE status='COMPLETE' AND network=? AND started_at >= ? ORDER BY id")
     .all(network, recordStartMs) as Array<{ id: number; started_at: number; mapping_version: number | null; crowd_version: number }>;
-  const marksQ = db.prepare("SELECT symbol, mark, funding_rate, bid, ask, min_notional FROM marks WHERE snapshot_id=?");
-  const gapsQ = db.prepare("SELECT symbol, gap FROM leans WHERE snapshot_id=? AND tradable=1");
-  const posQ = db.prepare("SELECT crowd, platform, member_id, symbol, signed_notional, size FROM positions WHERE snapshot_id=?");
 
-  const inputs: SnapshotInput[] = snaps.map((s) => {
-    const excluded = new Set(MAPPING_EXCLUDED[s.mapping_version ?? 0] ?? []);
-    return {
-      id: s.id,
-      ts: s.started_at,
-      crowdVersion: s.crowd_version,
-      mappingVersion: s.mapping_version ?? 0,
-      marks: Object.fromEntries(
-        (marksQ.all(s.id) as Array<{ symbol: string; mark: number; funding_rate: number | null; bid: number | null; ask: number | null; min_notional: number | null }>).map((m) => [
-          m.symbol,
-          { mark: m.mark, funding: m.funding_rate, mid: m.bid && m.ask ? (m.bid + m.ask) / 2 : null, minNotional: m.min_notional },
-        ]),
-      ),
-      gaps: Object.fromEntries(
-        (gapsQ.all(s.id) as Array<{ symbol: string; gap: number }>).filter((g) => !excluded.has(g.symbol)).map((g) => [g.symbol, g.gap]),
-      ),
-      members: (posQ.all(s.id) as Array<{ crowd: "copy" | "fade"; platform: string; member_id: string; symbol: string; signed_notional: number; size: number | null }>)
-        .filter((p) => !excluded.has(p.symbol))
-        .map((p) => ({ crowd: p.crowd, member: `${p.platform}:${p.member_id}`, symbol: p.symbol, notional: p.signed_notional, size: p.size })),
-    };
-  });
+  const inputs: SnapshotInput[] = snapshotRows(db, snaps).map((s) => snapshotInput(s, MAPPING_EXCLUDED));
 
   const paper = paperRecord(inputs, rules);
   const board = scoreboard(inputs);
@@ -70,4 +47,20 @@ export function rebuildRecords(db: Db, rules: Rules, recordStartMs: number, netw
     }
   })();
   return { snapshots: inputs.length };
+}
+
+/** Each snapshot's stored rows: marks, tradable leans and every crowd member's position. */
+export function snapshotRows(db: Db, snaps: Array<{ id: number; started_at: number; mapping_version: number | null; crowd_version: number }>): SnapshotRows[] {
+  const marksQ = db.prepare("SELECT symbol, mark, funding_rate, bid, ask, min_notional FROM marks WHERE snapshot_id=?");
+  const gapsQ = db.prepare("SELECT symbol, gap FROM leans WHERE snapshot_id=? AND tradable=1");
+  const posQ = db.prepare("SELECT crowd, platform, member_id, symbol, signed_notional, size FROM positions WHERE snapshot_id=?");
+  return snaps.map((s) => ({
+    id: s.id,
+    started_at: s.started_at,
+    crowd_version: s.crowd_version,
+    mapping_version: s.mapping_version,
+    marks: marksQ.all(s.id) as SnapshotRows["marks"],
+    leans: gapsQ.all(s.id) as SnapshotRows["leans"],
+    positions: posQ.all(s.id) as SnapshotRows["positions"],
+  }));
 }
