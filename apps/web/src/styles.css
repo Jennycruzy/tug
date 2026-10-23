@@ -29,7 +29,7 @@
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0a0e15;
     --bg-2: #0f1520;
     --card: #121925;
@@ -51,6 +51,27 @@
     color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+    --bg: #0a0e15;
+    --bg-2: #0f1520;
+    --card: #121925;
+    --ink: #e8ecf2;
+    --muted: #94a0b2;
+    --line: #232c3a;
+    --copy: #2fd0b3;
+    --copy-soft: rgba(47, 208, 179, 0.14);
+    --fade: #ff8a52;
+    --fade-soft: rgba(255, 138, 82, 0.14);
+    --knot: #f0b84a;
+    --hemp-a: #8f7652;
+    --hemp-b: #6a573c;
+    --ok: #4cc26e;
+    --bad: #ff6b5e;
+    --warn: #e0b341;
+    --tag: #1f2735;
+    --btn-ink: #0a0e15;
+    color-scheme: dark;
+  }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -276,3 +297,29 @@ ul.links { padding-left: 18px; line-height: 1.7; }
 .checks li.wait b { color: var(--muted); }
 .checks li span { overflow-wrap: anywhere; }
 .checks li small { display: block; color: var(--muted); }
+
+/* Join page */
+label.field { display: grid; gap: 6px; margin: 10px 0; font-weight: 600; }
+label.field input { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); max-width: 220px; }
+label.check { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; line-height: 1.45; }
+label.check input { margin-top: 3px; flex: none; }
+button.linkish { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+.btn[disabled] { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+/* Widget */
+body.embedded { background: var(--card); }
+.embed { padding: 12px 14px; font-size: 13px; }
+.embed-row { margin-bottom: 14px; }
+.embed-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-bottom: 6px; }
+.embed-head span { color: var(--muted); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
+.dot.copy { background: var(--copy); }
+.dot.fade { background: var(--fade); }
+.embed-foot { display: block; color: var(--muted); font-size: 12px; text-decoration: none; }
+.embed-foot:hover { text-decoration: underline; }
+
+/* Narrow screens: the page links wrap to a second row instead of scrolling out of sight. */
+@media (max-width: 640px) {
+  .top-wrap { height: auto; min-height: 56px; padding-top: 8px; padding-bottom: 8px; }
+  .top nav { flex-wrap: wrap; justify-content: flex-end; overflow: visible; row-gap: 2px; }
+}
