@@ -1,0 +1,37 @@
+{
+ "server": "https://api.strikefinance.org",
+ "account": "TUG mainnet",
+ "note": "A post-only buy that would have taken: accepted 201 pending, refused on the user stream (REJECTED, order_would_match_immediately), and 404 over REST.",
+ "replies": {
+  "order_pending": {
+   "at": "2026-10-23T02:46:26.964Z",
+   "method": "POST",
+   "path": "/v2/order",
+   "body": {
+    "symbol": "CXMT-USD",
+    "side": "buy",
+    "type": "limit",
+    "price": "6.1001",
+    "size": "1.6",
+    "time_in_force": "GTC",
+    "post_only": true,
+    "client_order_id": "tug-v1-mainnet-1792723586822-87-CXMT-USD-0"
+   },
+   "status": 201,
+   "raw": "{\"client_order_id\":\"tug-v1-mainnet-1792723586822-87-CXMT-USD-0\",\"account_id\":\"01a16637-81cb-7682-b614-4728271550aa\",\"symbol\":\"CXMT-USD\",\"status\":\"pending\",\"sequence_id\":1610058292,\"message_id\":\"1792723586906-0\"}"
+  },
+  "order_not_found": {
+   "at": "2026-10-23T02:46:30.100Z",
+   "method": "GET",
+   "path": "/v2/order?symbol=CXMT-USD&client_order_id=tug-v1-mainnet-1792723586822-87-CXMT-USD-0",
+   "status": 404,
+   "raw": "{\"error\":\"order not found\"}"
+  }
+ },
+ "stream": {
+  "order_rejected": {
+   "at": "2026-10-23T02:46:26.994Z",
+   "raw": "{\"e\":\"ORDER_TRADE_UPDATE\",\"E\":1792723586946,\"data\":{\"s\":\"CXMT-USD\",\"c\":\"tug-v1-mainnet-1792723586822-87-CXMT-USD-0\",\"S\":\"BUY\",\"o\":\"LIMIT\",\"f\":\"GTC\",\"q\":\"1.6\",\"p\":\"6.1001\",\"ap\":\"\",\"sp\":\"0\",\"x\":\"REJECTED\",\"X\":\"REJECTED\",\"i\":11516745517,\"cr\":\"order_would_match_immediately\",\"l\":\"\",\"z\":\"0\",\"L\":\"\",\"N\":\"\",\"n\":\"\",\"ott\":1792723586906,\"t\":0,\"b\":\"\",\"a\":\"\",\"m\":false,\"R\":false,\"wt\":\"\",\"ot\":\"LIMIT\",\"ps\":\"\",\"cp\":false,\"rp\":\"\",\"act\":\"\",\"E\":1792723586946,\"T\":1792723586906}}"
+  }
+ }
+}

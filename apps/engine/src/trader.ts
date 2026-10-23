@@ -55,8 +55,9 @@ export class Trader {
         // A liquidation or auto-deleverage announced on the stream marks the account halted (§9.7).
         if (f.kind === "event" && /liquidat|adl|bankrupt/i.test(f.type)) this.accountStatus = "liquidation";
         if (f.kind === "order") {
-          const o = f.order as { c: string; X: string; i: number };
+          const o = f.order as { c: string; X: string; i: number; cr?: string };
           this.db.prepare("UPDATE orders SET status=?, order_id=COALESCE(order_id, ?), updated_at=? WHERE client_order_id=?").run(o.X.toLowerCase(), o.i, Date.now(), o.c);
+          this.ex.noteStreamOrder(o.c, o.X, String(o.cr ?? ""), o.i);
         }
       },
       resync: () => void this.syncFills(),
@@ -197,6 +198,8 @@ export class Trader {
       this.cycle++;
       const acct = await this.ex.account();
       const held = await this.ex.positions();
+      // Price from a fresh book: the 30 s cache can be far enough behind that a resting price would take.
+      this.books = await bookTickers();
       const boundary = Math.floor(Date.now() / (this.rules.rebalance_every_minutes * 60_000));
       if (boundary !== this.targetsBoundary) {
         const snap = this.db.prepare("SELECT MAX(id) AS id FROM snapshots WHERE status='COMPLETE' AND network='mainnet'").get() as { id: number };

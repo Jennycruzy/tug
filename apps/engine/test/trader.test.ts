@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { accountStatusFrom, loadRules } from "@tug/core";
-import { StrikeSigned } from "@tug/strike";
+import { parseUserFrame, StrikeSigned } from "@tug/strike";
 import { openDb } from "../src/db.js";
 import { Executor } from "../src/executor.js";
 import { Trader } from "../src/trader.js";
@@ -204,5 +204,61 @@ describe("leverage is set and read back before TUG trades a market", () => {
       io.restore();
     }
     expect(io.sent).toHaveLength(0);
+  });
+});
+
+// Real Strike mainnet replies (23 Oct): a post-only buy accepted as pending, refused on the user stream, 404 over REST.
+const M = JSON.parse(readFileSync(new URL("./fixtures/order-rejected-mainnet-2026-10-23.json", import.meta.url), "utf8")) as {
+  replies: Record<string, { status: number; raw: string; body?: Record<string, string> }>;
+  stream: { order_rejected: { raw: string } };
+};
+
+describe("a refusal seen only on the user stream (mainnet)", () => {
+  it("is returned as rejected with Strike's reason, not logged as a dropped order", async () => {
+    const db = openDb(":memory:");
+    const ex = new Executor(db, new StrikeSigned(SECRET, "https://example.invalid"), "mainnet", { trading: true, killFile: "/nonexistent/kill", pollMs: 5 });
+    const body = M.replies.order_pending!.body!;
+    const real = globalThis.fetch;
+    const sent: string[] = [];
+    globalThis.fetch = (async (url: string, init: RequestInit) => {
+      const method = init.method ?? "GET";
+      sent.push(method);
+      const r = method === "POST" ? M.replies.order_pending! : M.replies.order_not_found!;
+      if (method === "POST") {
+        // Strike's stream frame arrives about 40 ms after the order is sent.
+        const f = parseUserFrame(JSON.parse(M.stream.order_rejected.raw));
+        setTimeout(() => {
+          if (f.kind === "order") ex.noteStreamOrder(f.order.c, f.order.X, String((f.order as { cr?: string }).cr ?? ""), f.order.i);
+        }, 40);
+      }
+      return new Response(r.raw, { status: r.status });
+    }) as typeof fetch;
+    let order;
+    try {
+      order = await ex.placePostOnly({ symbol: body.symbol!, side: body.side as "buy", price: body.price!, size: body.size!, clientOrderId: body.client_order_id!, reason: "check" });
+    } finally {
+      globalThis.fetch = real;
+    }
+    expect(order.Status).toBe("rejected");
+    expect((order as { CloseReason?: string }).CloseReason).toBe("order_would_match_immediately");
+    expect((db.prepare("SELECT status FROM orders").get() as { status: string }).status).toBe("rejected");
+    expect((db.prepare("SELECT COUNT(*) AS n FROM events WHERE code='E-DROPPED'").get() as { n: number }).n).toBe(0);
+    expect(sent.filter((m) => m === "POST")).toHaveLength(1);
+  });
+
+  it("an order with no REST record and no stream update is still reported as dropped", async () => {
+    const db = openDb(":memory:");
+    const ex = new Executor(db, new StrikeSigned(SECRET, "https://example.invalid"), "mainnet", { trading: true, killFile: "/nonexistent/kill", pollMs: 1 });
+    const body = M.replies.order_pending!.body!;
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      const r = (init.method ?? "GET") === "POST" ? M.replies.order_pending! : M.replies.order_not_found!;
+      return new Response(r.raw, { status: r.status });
+    }) as typeof fetch;
+    try {
+      await expect(ex.placePostOnly({ symbol: body.symbol!, side: "buy", price: body.price!, size: body.size!, clientOrderId: body.client_order_id!, reason: "check" })).rejects.toMatchObject({ code: "E-DROPPED" });
+    } finally {
+      globalThis.fetch = real;
+    }
   });
 });

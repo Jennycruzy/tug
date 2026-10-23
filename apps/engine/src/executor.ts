@@ -57,7 +57,18 @@ export class Executor {
       .run(status, orderId ?? null, Date.now(), clientOrderId);
   }
 
-  /** Places one post-only GTC limit order and confirms it by a REST read within 30 s. */
+  private readonly streamed = new Map<string, { status: string; reason: string; id: number }>();
+
+  /**
+   * An order update from the account's user stream. On mainnet Strike answers 404 over REST for an order it
+   * refused (OBSERVED 23 Oct: post-only REJECTED, order_would_match_immediately); the stream is the only place
+   * the refusal and its reason appear, within milliseconds.
+   */
+  noteStreamOrder(clientOrderId: string, status: string, reason: string, orderId: number): void {
+    this.streamed.set(clientOrderId, { status: status.toLowerCase(), reason, id: orderId });
+  }
+
+  /** Places one post-only GTC limit order and confirms it within 30 s, by REST read or by the user stream. */
   async placePostOnly(o: PostOnlyOrder): Promise<OpenOrder> {
     if (this.isKilled()) throw new TugError("E-KILLED", "The kill switch is on; no order is placed until it is cleared.");
     if (this.network === "mainnet" && !this.opts.trading) {
@@ -89,6 +100,12 @@ export class Executor {
     const path = `/v2/order?symbol=${encodeURIComponent(o.symbol)}&client_order_id=${encodeURIComponent(o.clientOrderId)}`;
     for (let i = 0; i < 10; i++) {
       await sleep(this.opts.pollMs ?? 3_000);
+      const seen = this.streamed.get(o.clientOrderId);
+      if (seen && (seen.status === "rejected" || seen.status === "canceled" || seen.status === "expired")) {
+        this.setStatus(o.clientOrderId, seen.status, seen.id);
+        logEvent(this.db, "executor", "info", `order ${seen.status}`, undefined, { clientOrderId: o.clientOrderId, orderId: seen.id, reason: seen.reason, via: "user stream" });
+        return OpenOrderSchema.parse({ ID: seen.id, ClientOrderID: o.clientOrderId, Symbol: o.symbol, Side: o.side, Status: seen.status, Size: o.size, Filled: "0", Price: o.price, PostOnly: true, CloseReason: seen.reason });
+      }
       const r = await this.client.call("GET", path);
       // Every read is stored, the 404s of an order that never appeared included.
       this.db
