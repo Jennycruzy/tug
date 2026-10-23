@@ -27,7 +27,8 @@ export interface WalletChoice {
   id: string;
   label: string;
   chain: "cardano" | "ethereum" | "solana";
-  connect(): Promise<{ address: string; sign(message: string): Promise<string> }>;
+  /** The network is read when the person presses Connect, so a later network choice can never use an old one. */
+  connect(network: "testnet" | "mainnet"): Promise<{ address: string; sign(message: string): Promise<string> }>;
 }
 
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
@@ -81,7 +82,7 @@ export function base58(bytes: Uint8Array): string {
 }
 
 /** The wallets this browser has; a Cardano wallet must be on the chosen network (Preprod for testnet). */
-export function walletsInBrowser(network: "testnet" | "mainnet" = "testnet"): WalletChoice[] {
+export function walletsInBrowser(): WalletChoice[] {
   const out: WalletChoice[] = [];
   for (const [id, w] of Object.entries(window.cardano ?? {})) {
     if (!w || typeof w.enable !== "function" || id === "typhoncip30") continue;
@@ -89,7 +90,7 @@ export function walletsInBrowser(network: "testnet" | "mainnet" = "testnet"): Wa
       id: `cardano-${id}`,
       label: `${w.name ?? id} (Cardano)`,
       chain: "cardano",
-      connect: async () => {
+      connect: async (network) => {
         const api = await w.enable();
         const want = network === "mainnet" ? 1 : 0;
         if ((await api.getNetworkId()) !== want) {

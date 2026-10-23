@@ -122,9 +122,9 @@ function InYourAccount() {
 
   // Wallet extensions add themselves a moment after the page loads.
   useEffect(() => {
-    const t = setTimeout(() => setWallets(walletsInBrowser(network)), 600);
+    const t = setTimeout(() => setWallets(walletsInBrowser()), 600);
     return () => clearTimeout(t);
-  }, [network]);
+  }, []);
 
   const refresh = async (s = saved) => {
     if (!s) return;
@@ -156,7 +156,7 @@ function InYourAccount() {
 
   const connectWith = (w: WalletChoice) =>
     step(`Connecting ${w.label}…`, async () => {
-      const wallet = await w.connect();
+      const wallet = await w.connect(network);
       const s = await post<{ id: string; token: string; message_to_sign: string }>("/api/v1/connect/start", { network, chain: w.chain, address: wallet.address });
       save({ id: s.id, token: s.token });
       setSaved({ id: s.id, token: s.token });
