@@ -5,7 +5,6 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadRules } from "@tug/core";
 import { ROOT } from "../config.js";
 import { verifyBundle } from "../verify.js";
 
@@ -21,8 +20,6 @@ if (!dir) {
 }
 const fp = (JSON.parse(readFileSync(join(ROOT, "evidence/rules-fingerprints.json"), "utf8")) as Array<{ file: string; sha256: string }>)[0]!;
 const checks = await verifyBundle(dir, {
-  rules: loadRules(join(ROOT, fp.file)).rules,
-  rulesFile: readFileSync(join(ROOT, fp.file)),
   rulesSha256: fp.sha256,
   strikeFills: offline
     ? undefined

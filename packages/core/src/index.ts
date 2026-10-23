@@ -1,4 +1,5 @@
 export * from "./rules.js";
+export * from "./rulesFile.js";
 export * from "./mapping.js";
 export * from "./leans.js";
 export * from "./bucket.js";
@@ -10,3 +11,4 @@ export * from "./sizing.js";
 export * from "./depth.js";
 export * from "./fees.js";
 export * from "./risk.js";
+export * from "./verify.js";

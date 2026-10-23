@@ -12,7 +12,8 @@ import { FIXTURE, fixtureDb } from "./fixture-db.js";
 
 const RULES_FILE = "rules/tug-rules-v1.json";
 const loaded = loadRules(RULES_FILE);
-const opts = { rules: loaded.rules, rulesFile: readFileSync(RULES_FILE), rulesSha256: loaded.sha256 };
+const opts = { rulesSha256: loaded.sha256 };
+const rulesFile = readFileSync(RULES_FILE);
 // Real fills of the live account (23 Oct), with Strike's fill ids, as stored by the trader.
 const LIVE = JSON.parse(readFileSync(new URL("./fixtures/live-mainnet-2026-10-23.json", import.meta.url), "utf8")) as { fills: Array<Record<string, string | number | null>> };
 
@@ -28,7 +29,7 @@ function bundle() {
   d.run("mainnet", 1792721000000, "CXMT-USD", "sell", 5.8361, 1.6, 1, 4.8, 20.1);
   d.run("mainnet", 1792721060000, "CXMT-USD", "sell", 5.8361, 1.6, 0, 3.2, 18.4);
   const dir = mkdtempSync(join(tmpdir(), "tug-ev-"));
-  const first = exportEvidence(db, dir, { recordStartMs: 0, salt: "test-salt" });
+  const first = exportEvidence(db, dir, { recordStartMs: 0, salt: "test-salt", rulesFile });
   return { db, dir, first };
 }
 
@@ -74,10 +75,22 @@ describe("evidence bundle and pnpm verify (real recorded snapshots)", () => {
     expect(checks.find((c) => c.name === "Strike re-read")!.ok).toBe(false);
   });
 
+  it("a rules file other than the published one fails the rules check", async () => {
+    const { dir } = bundle();
+    writeFileSync(join(dir, "rules/tug-rules-v1.json"), rulesFile.toString("utf8").replace('"leverage_setting": 5', '"leverage_setting": 6'));
+    const manifest = listFiles(dir)
+      .filter((p) => p !== "MANIFEST.sha256")
+      .map((p) => `${createHash("sha256").update(readFileSync(join(dir, p))).digest("hex")}  ${p}`)
+      .join("\n");
+    writeFileSync(join(dir, "MANIFEST.sha256"), manifest + "\n");
+    const checks = await verifyBundle(dir, opts);
+    expect(checks.find((c) => c.name === "rules")!.ok).toBe(false);
+  });
+
   it("an unchanged database exports byte-identical files (nothing to commit)", () => {
     const { db, dir, first } = bundle();
     expect(first.written.length).toBeGreaterThan(3);
-    expect(exportEvidence(db, dir, { recordStartMs: 0, salt: "test-salt" }).written).toEqual([]);
+    expect(exportEvidence(db, dir, { recordStartMs: 0, salt: "test-salt", rulesFile }).written).toEqual([]);
   });
 
   it("no Strike account id appears in the bundle: Strike members are pseudonyms", () => {

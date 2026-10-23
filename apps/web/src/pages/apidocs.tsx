@@ -4,11 +4,12 @@ const ENDPOINTS: Array<[string, string]> = [
   ["/api/v1/tug", "Every Strike market: both crowds, the gap, TUG's position"],
   ["/api/v1/tug/ETH-USD", "One market with the largest members and 24 hours of lean history"],
   ["/api/v1/crowds", "The current crowd lists, from Strike's own scores and tags"],
-  ["/api/v1/record", "Records; the paper record is labelled MODEL"],
+  ["/api/v1/record", "Records: the live account, the testnet vault (TESTNET) and the paper record (MODEL)"],
   ["/api/v1/record/fills", "Fills with Strike order ids"],
   ["/api/v1/paper", "The paper record (MODEL) with the targets of the last rebalance"],
   ["/api/v1/scoreboard", "Copy picks and fade picks since the record started, per market"],
-  ["/api/v1/proof", "Rules fingerprint, market mapping, snapshot counts, fees saved"],
+  ["/api/v1/proof", "Rules fingerprint, market mapping, snapshot counts, fees saved, depth added"],
+  ["/api/v1/evidence/MANIFEST.sha256", "The evidence bundle's files and their SHA-256; each file at /api/v1/evidence/<path>"],
   ["/api/v1/status", "Heartbeats, snapshots, orders and errors"],
 ];
 

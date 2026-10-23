@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { sha256 } from "@noble/hashes/sha2";
 import { bytesToHex } from "@noble/hashes/utils";
 import { z } from "zod";
@@ -46,12 +45,6 @@ export interface LoadedRules {
 /** Hash of the exact file bytes; this is the published fingerprint. */
 export function rulesFingerprint(bytes: Uint8Array): string {
   return bytesToHex(sha256(bytes));
-}
-
-export function loadRules(path: string): LoadedRules {
-  const bytes = readFileSync(path);
-  const rules = RulesSchema.parse(JSON.parse(bytes.toString("utf8")));
-  return { rules, sha256: rulesFingerprint(bytes) };
 }
 
 export interface Fingerprint {

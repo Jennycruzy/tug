@@ -5,7 +5,7 @@ import { chromium } from "@playwright/test";
 
 const base = process.argv[2] ?? "https://tug.38-49-216-59.sslip.io";
 const ids: string[] = process.argv[3] ? (JSON.parse(readFileSync(process.argv[3], "utf8")) as string[]) : [];
-const PAGES = ["/", "/m/ETH-USD", "/m/LIT-USD", "/m/NIGHT-USD", "/m/CXMT-USD", "/record", "/scoreboard", "/api", "/status", "/no-such-page"];
+const PAGES = ["/", "/m/ETH-USD", "/m/LIT-USD", "/m/NIGHT-USD", "/m/CXMT-USD", "/record", "/scoreboard", "/proof", "/check", "/api", "/status", "/no-such-page"];
 
 const browser = await chromium.launch();
 let failed = 0;

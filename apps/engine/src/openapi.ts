@@ -278,6 +278,13 @@ export const OPENAPI = {
     "/api/v1/paper": { get: { summary: "The paper record (MODEL): equity, turnover, fees, funding, targets", responses: { "200": ok("Paper", "Paper record") } } },
     "/api/v1/scoreboard": { get: { summary: "How Strike's copy picks and fade picks have done since the record started", responses: { "200": ok("Scoreboard", "Scoreboard") } } },
     "/api/v1/proof": { get: { summary: "Rules fingerprint, mapping, fees saved, evidence links", responses: { "200": ok("Proof", "Proof") } } },
+    "/api/v1/evidence/{path}": {
+      get: {
+        summary: "One file of the evidence bundle (MANIFEST.sha256, or a file it lists), byte for byte",
+        parameters: [{ name: "path", in: "path", required: true, schema: str }],
+        responses: { "200": { description: "The file", content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } }, "404": err("Not a file of the bundle") },
+      },
+    },
     "/api/v1/status": { get: { summary: "Engine heartbeats, snapshots, orders and errors", responses: { "200": ok("Status", "Status") } } },
   },
   components: { schemas },
@@ -310,6 +317,8 @@ OpenAPI 3.1: https://tug.38-49-216-59.sslip.io/api/openapi.json
 - GET /api/v1/proof: the rules fingerprint (SHA-256, published before the record started), the market
   mapping, snapshot counts, fees saved, and depth added: each minute a TUG order rests on Strike's book, its
   share of the size at the best price and in the top 5 levels; plus maker fills, maker volume and rebates.
+- GET /api/v1/evidence/MANIFEST.sha256 and /api/v1/evidence/<path>: the evidence bundle file by file, the same
+  bytes as the tug-evidence repository; "pnpm verify" and the /check page recompute every record from it.
 - GET /api/v1/status: heartbeats, recent snapshots, orders and errors.
 
 ## Words

@@ -29,6 +29,8 @@ export const PUBLIC_SENTENCES: Record<string, string> = {
   "E-KILL-LEFT": "The kill switch ran but orders were still open afterwards.",
   "E-TRADING-OFF": "Trading is off; no order was placed.",
   "E-LEVERAGE": "A market's leverage or margin mode could not be set to the rules' value; TUG does not trade that market.",
+  "E-NETWORK": "The vault trader was pointed at a Strike network other than testnet, so it did not start.",
+  "E-EVIDENCE": "The file asked for is not part of the published evidence bundle, or the bundle is not there yet.",
   "E-TRANSFER": "Strike recorded money moving in or out of the account that is neither a deposit nor a withdrawal; it is not counted as money put in.",
   "E-ADMIN-PORT": "The trader's pause switch could not open its port, so the trader did not start.",
   "E-KEY": "An account key is missing; nothing was signed.",

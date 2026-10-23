@@ -2,7 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { gzipSync } from "node:zlib";
-import { depthSummary } from "@tug/core";
+import { depthSummary, RULES_IN_BUNDLE } from "@tug/core";
 import type { Db } from "./db.js";
 import { snapshotRows } from "./records.js";
 
@@ -15,10 +15,12 @@ import { snapshotRows } from "./records.js";
  * Strike account ids in crowds and positions are replaced by a salted pseudonym (the same member gets the same
  * pseudonym everywhere, so every record still recomputes): Strike traders are never listed one by one (§12, T-PRIV).
  */
-export function exportEvidence(db: Db, dir: string, o: { recordStartMs: number; salt: string; now?: number }): { written: string[]; files: number } {
+export function exportEvidence(db: Db, dir: string, o: { recordStartMs: number; salt: string; rulesFile: Buffer }): { written: string[]; files: number } {
   const pseudo = (platform: string, id: string) => (platform === "strike" ? `s-${createHmac("sha256", o.salt).update(id).digest("hex").slice(0, 16)}` : id);
   const day = (ts: number) => new Date(ts).toISOString().slice(0, 10);
   const files = new Map<string, Buffer>();
+  // The published rules file itself, so the bundle checks without the code repository (the browser check).
+  files.set(RULES_IN_BUNDLE, o.rulesFile);
   const jsonl = (rows: unknown[]) => gzipSync(Buffer.from(rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : "")), { level: 9 });
   const byDay = <T>(rows: T[], ts: (r: T) => number) => {
     const m = new Map<string, T[]>();

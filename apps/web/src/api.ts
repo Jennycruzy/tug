@@ -238,7 +238,16 @@ export interface ProofReply {
     tug: { turnover: number; fees: number };
     saved: number;
   } | null;
-  depth_added: null;
+  depth_added: {
+    network: string;
+    since: number | null;
+    minutes_resting: number;
+    markets: Array<{ symbol: string; minutes_resting: number; minutes_at_best: number; avg_share_of_best: number; avg_share_of_top5: number }>;
+    maker_fills: number;
+    fills: number;
+    maker_volume: number;
+    rebates: number;
+  };
   evidence: { code: string; data: string };
 }
 

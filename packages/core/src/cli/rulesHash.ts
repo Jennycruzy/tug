@@ -1,4 +1,4 @@
-import { loadRules } from "../rules.js";
+import { loadRules } from "../rulesFile.js";
 
 const file = process.argv[2] ?? "rules/tug-rules-v1.json";
 const { rules, sha256 } = loadRules(file);

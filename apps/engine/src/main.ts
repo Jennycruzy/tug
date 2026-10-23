@@ -107,6 +107,7 @@ if (NETWORK === "mainnet") {
       liveStartEquity: process.env.TUG_START_EQUITY ? Number(process.env.TUG_START_EQUITY) : undefined,
       liveAccountId: process.env.TUG_ACCOUNT_ID,
       liveNickname: process.env.TUG_ACCOUNT_NICKNAME,
+      evidenceDir: process.env.TUG_EVIDENCE_REPO_DIR ?? "/home/tug/tug-evidence",
     }, API_PORT);
   log("api listening", { port: API_PORT });
   process.on("exit", () => void api.close());

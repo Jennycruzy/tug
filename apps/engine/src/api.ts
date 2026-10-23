@@ -20,6 +20,8 @@ export interface ApiContext {
   liveAccountId?: string;
   /** The live account's nickname on Strike, for its public trader page. */
   liveNickname?: string;
+  /** The checkout of the evidence repository, served file by file for the browser check (`/check`). */
+  evidenceDir?: string;
 }
 
 interface SnapshotRow {
@@ -480,6 +482,17 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
       depth_added: depthAdded("mainnet"),
       evidence: { code: "https://github.com/Jennycruzy/tug", data: "https://github.com/Jennycruzy/tug-evidence" },
     };
+  });
+
+  // The evidence bundle for `/check`: MANIFEST.sha256 and only the files it lists, read as they are on disk.
+  app.get<{ Params: { "*": string } }>("/api/v1/evidence/*", async (req, reply) => {
+    const dir = ctx.evidenceDir;
+    const path = req.params["*"];
+    const manifestFile = dir ? join(dir, "MANIFEST.sha256") : "";
+    if (!dir || !existsSync(manifestFile)) return reply.code(404).send({ code: "E-EVIDENCE", message: "No evidence bundle yet." });
+    const listed = new Set(readFileSync(manifestFile, "utf8").split("\n").filter(Boolean).map((l) => l.slice(66)));
+    if (path !== "MANIFEST.sha256" && !listed.has(path)) return reply.code(404).send({ code: "E-EVIDENCE", message: "Not a file of the evidence bundle." });
+    return reply.type(path.endsWith(".json") ? "application/json" : path.endsWith(".sha256") ? "text/plain; charset=utf-8" : "application/octet-stream").header("cache-control", "no-cache").send(readFileSync(join(dir, path)));
   });
 
   app.get("/api/openapi.json", async () => OPENAPI);

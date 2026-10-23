@@ -3,6 +3,8 @@ import { ApiPage } from "./pages/apidocs.js";
 import { Home } from "./pages/home.js";
 import { MarketPage } from "./pages/market.js";
 import { NotFound } from "./pages/notfound.js";
+import { CheckPage } from "./pages/check.js";
+import { ProofPage } from "./pages/proof.js";
 import { RecordPage } from "./pages/record.js";
 import { ScoreboardPage } from "./pages/scoreboard.js";
 import { Status } from "./pages/status.js";
@@ -26,6 +28,7 @@ export function App() {
             <a href="/#markets">Markets</a>
             <a href="/record">Record</a>
             <a href="/scoreboard">Scoreboard</a>
+            <a href="/proof">Proof</a>
             <a href="/api">API</a>
             <a href="/status">Status</a>
           </nav>
@@ -37,6 +40,8 @@ export function App() {
           <Route path="/m/:symbol" component={MarketPage} />
           <Route path="/record" component={RecordPage} />
           <Route path="/scoreboard" component={ScoreboardPage} />
+          <Route path="/proof" component={ProofPage} />
+          <Route path="/check" component={CheckPage} />
           <Route path="/api" component={ApiPage} />
           <Route path="/status" component={Status} />
           <Route default component={NotFound} />

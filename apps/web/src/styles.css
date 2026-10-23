@@ -264,3 +264,15 @@ main > .page:not(.wide) { max-width: 820px; }
 .strike-links { font-size: 14px; color: var(--muted); }
 .strike-links a { color: var(--ink); }
 .note.small { font-size: 13px; margin-top: -4px; }
+
+/* Proof and Check pages */
+code.wrap { overflow-wrap: anywhere; word-break: break-all; font-size: 12px; }
+ul.links { padding-left: 18px; line-height: 1.7; }
+.checks { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 8px; }
+.checks li { display: grid; grid-template-columns: 56px 1fr; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.checks li b { font: 700 12px/1.6 var(--mono); }
+.checks li.pass b { color: var(--copy); }
+.checks li.fail b { color: var(--fade); }
+.checks li.wait b { color: var(--muted); }
+.checks li span { overflow-wrap: anywhere; }
+.checks li small { display: block; color: var(--muted); }
