@@ -68,7 +68,22 @@ export class Trader {
     every(RISK_EVERY_MS, () => this.riskTick());
     every(TRADE_EVERY_MS, () => this.tradeTick());
     every(60_000, () => this.syncFills());
-    void this.readMarkets().then(() => this.riskTick()).catch((e) => this.fail(e));
+    void this.readMarkets()
+      .then(() => this.leverageForHeld())
+      .then(() => this.riskTick())
+      .catch((e) => this.fail(e));
+  }
+
+  /** At start: every market TUG already holds gets the rules' leverage (read back), before any new order. */
+  async leverageForHeld(): Promise<void> {
+    if (!this.cfg.tradingOn()) return;
+    for (const s of Object.keys(await this.ex.positions()).filter((x) => this.allowed(x))) {
+      try {
+        await this.ex.ensureLeverage(s, this.rules.leverage_setting, this.rules.margin_mode);
+      } catch (e) {
+        this.fail(e);
+      }
+    }
   }
 
   stop(): void {
@@ -259,6 +274,8 @@ export class Trader {
    * accepted it but never placed it (E-DROPPED), retry once with a new id (§9.5.7).
    */
   async placeWithRequote(o: { symbol: string; side: "buy" | "sell"; price: string; size: string; why: string }, attempt: number, dropRetry = false): Promise<void> {
+    // A market is traded only at the rules' leverage and margin mode; a failure here places nothing.
+    if (!this.ex.leverageConfirmed(o.symbol)) await this.ex.ensureLeverage(o.symbol, this.rules.leverage_setting, this.rules.margin_mode);
     let order;
     try {
       order = await this.ex.placePostOnly({ symbol: o.symbol, side: o.side, price: o.price, size: o.size, clientOrderId: this.clientId(`${this.cycle}-${o.symbol}-${attempt}${dropRetry ? "r" : ""}`), reason: o.why });

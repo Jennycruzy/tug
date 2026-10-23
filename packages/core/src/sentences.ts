@@ -28,6 +28,8 @@ export const PUBLIC_SENTENCES: Record<string, string> = {
   "E-KILLED": "The kill switch was turned on: no new orders until it is cleared.",
   "E-KILL-LEFT": "The kill switch ran but orders were still open afterwards.",
   "E-TRADING-OFF": "Trading is off; no order was placed.",
+  "E-LEVERAGE": "A market's leverage or margin mode could not be set to the rules' value; TUG does not trade that market.",
+  "E-ADMIN-PORT": "The trader's pause switch could not open its port, so the trader did not start.",
   "E-KEY": "An account key is missing; nothing was signed.",
   "E-EXIT": "A position was closed by hand with a reduce-only order.",
   "E-STOP-OPEN": "A position could not be confirmed closed after a stop; closing is retried and the owner is alerted.",

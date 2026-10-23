@@ -1,0 +1,45 @@
+{
+ "server": "https://api-v2-testnet.strikefinance.org",
+ "account": "testnet-leader",
+ "captured_at": "2026-10-23T01:29:59.214Z",
+ "replies": {
+  "symbols_before": {
+   "at": "2026-10-23T01:29:59.672Z",
+   "method": "GET",
+   "path": "/v2/symbols",
+   "body": null,
+   "status": 200,
+   "raw": "{\"default_margin_mode\":\"cross\",\"default_leverage\":10,\"symbol_settings\":{\"ADA-USD\":{\"margin_mode\":\"cross\",\"leverage\":20},\"BTC-USD\":{\"margin_mode\":\"cross\",\"leverage\":20},\"ETH-USD\":{\"margin_mode\":\"cross\",\"leverage\":5},\"SOL-USD\":{\"margin_mode\":\"cross\",\"leverage\":20}}}"
+  },
+  "leverage_set": {
+   "at": "2026-10-23T01:29:59.854Z",
+   "method": "POST",
+   "path": "/v2/leverage",
+   "body": {
+    "symbol": "BTC-USD",
+    "leverage": 5
+   },
+   "status": 200,
+   "raw": "{\"leverage\":5,\"maxNotionalValue\":\"480000000\",\"symbol\":\"BTC-USD\",\"request_id\":\"01a16661-10f6-7e62-9e99-0adee6cc4872\"}"
+  },
+  "symbols_after": {
+   "at": "2026-10-23T01:30:01.521Z",
+   "method": "GET",
+   "path": "/v2/symbols",
+   "body": null,
+   "status": 200,
+   "raw": "{\"default_margin_mode\":\"cross\",\"default_leverage\":10,\"symbol_settings\":{\"ADA-USD\":{\"margin_mode\":\"cross\",\"leverage\":20},\"BTC-USD\":{\"margin_mode\":\"cross\",\"leverage\":5},\"ETH-USD\":{\"margin_mode\":\"cross\",\"leverage\":5},\"SOL-USD\":{\"margin_mode\":\"cross\",\"leverage\":20}}}"
+  },
+  "leverage_bad": {
+   "at": "2026-10-23T01:30:01.644Z",
+   "method": "POST",
+   "path": "/v2/leverage",
+   "body": {
+    "symbol": "BTC-USD",
+    "leverage": 500
+   },
+   "status": 400,
+   "raw": "{\"error\":\"Key: 'LeverageRequest.Leverage' Error:Field validation for 'Leverage' failed on the 'max' tag\"}"
+  }
+ }
+}

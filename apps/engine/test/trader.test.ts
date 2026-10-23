@@ -31,6 +31,7 @@ describe("rebalance tick (real Strike testnet replies)", () => {
     const db = openDb(":memory:");
     const ex = new Executor(db, new StrikeSigned(SECRET, "https://example.invalid"), "testnet", { trading: true, killFile: "/nonexistent/kill", pollMs: 1 });
     const trader = new Trader(db, ex, rules, { network: "testnet", markets: "all", tradingOn: () => true, pausedFile: "/nonexistent/paused", keyFile: "unused" });
+    for (const s of ["NOPE-USD", "ETH-USD"]) ex.setLeverageConfirmedForCheck(s);
     const io = strikeReplies();
     try {
       const want = new Map([
@@ -97,5 +98,111 @@ describe("risk exits log their own reason", () => {
     expect(posts[1]).toMatchObject({ type: "market", reduce_only: true, close_position: true });
     const rows = (db.prepare("SELECT status FROM orders ORDER BY placed_at").all() as Array<{ status: string }>).map((r) => r.status);
     expect(rows.every((s) => s !== "pending" && s !== "sent")).toBe(true);
+  });
+});
+
+// Real Strike testnet replies for the leverage step (BTC-USD 20x → 5x, read back, and a refused value).
+const L = JSON.parse(readFileSync(new URL("./fixtures/leverage-testnet-2026-10-23.json", import.meta.url), "utf8")).replies as Record<string, { status: number; raw: string }>;
+
+/** Serves /v2/symbols from `symbols` in turn (the last one repeats), POST /v2/leverage and orders from real replies. */
+function leverageReplies(symbols: string[], leverage = "leverage_set") {
+  const sent: Array<{ method: string; url: string; body: Record<string, unknown> | null }> = [];
+  const real = globalThis.fetch;
+  let reads = 0;
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    const method = init.method ?? "GET";
+    const body = init.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : null;
+    sent.push({ method, url, body });
+    const r = url.includes("/v2/symbols")
+      ? L[symbols[Math.min(reads++, symbols.length - 1)]!]
+      : url.includes("/v2/leverage")
+        ? L[leverage]
+        : method === "POST"
+          ? R.order_accepted
+          : url.includes("/v2/openOrders")
+            ? R.open_orders_empty
+            : R.order_open;
+    return new Response(r!.raw, { status: r!.status });
+  }) as typeof fetch;
+  return { sent, restore: () => (globalThis.fetch = real) };
+}
+
+describe("leverage is set and read back before TUG trades a market", () => {
+  const exFor = (network = "testnet", trading = true) => {
+    const db = openDb(":memory:");
+    return { db, ex: new Executor(db, new StrikeSigned(SECRET, "https://example.invalid"), network, { trading, killFile: "/nonexistent/kill", pollMs: 1 }) };
+  };
+
+  it("a market at 20x is set to the rules' 5x cross and confirmed from /v2/symbols", async () => {
+    const { db, ex } = exFor();
+    const io = leverageReplies(["symbols_before", "symbols_after"]);
+    let r;
+    try {
+      r = await ex.ensureLeverage("BTC-USD", rules.leverage_setting, rules.margin_mode);
+    } finally {
+      io.restore();
+    }
+    expect(rules.leverage_setting).toBe(5);
+    expect(r).toEqual({ symbol: "BTC-USD", before: { margin_mode: "cross", leverage: 20 }, after: { margin_mode: "cross", leverage: 5 } });
+    expect(io.sent.filter((s) => s.method === "POST").map((s) => s.body)).toEqual([{ symbol: "BTC-USD", leverage: 5 }]);
+    expect(ex.leverageConfirmed("BTC-USD")).toBe(true);
+    expect((db.prepare("SELECT message FROM events WHERE component='executor'").get() as { message: string }).message).toBe("leverage BTC-USD 5x cross");
+  });
+
+  it("a market already at 5x cross is only read; a market with no setting reads the account default", async () => {
+    const { ex } = exFor();
+    const io = leverageReplies(["symbols_after"]);
+    try {
+      await ex.ensureLeverage("ETH-USD", 5, "cross");
+      await expect(ex.ensureLeverage("XRP-USD", 5, "cross")).rejects.toMatchObject({ code: "E-LEVERAGE" });
+    } finally {
+      io.restore();
+    }
+    // ETH-USD: read only. XRP-USD (no setting, default 10x): asked once, still reads 10x, so it is refused.
+    expect(io.sent.filter((s) => s.method === "POST").map((s) => s.body)).toEqual([{ symbol: "XRP-USD", leverage: 5 }]);
+    expect(ex.leverageConfirmed("ETH-USD")).toBe(true);
+    expect(ex.leverageConfirmed("XRP-USD")).toBe(false);
+  });
+
+  it("a refused leverage request places no order on that market", async () => {
+    const { db, ex } = exFor();
+    const trader = new Trader(db, ex, rules, { network: "testnet", markets: "all", tradingOn: () => true, pausedFile: "/nonexistent/paused", keyFile: "unused" });
+    const io = leverageReplies(["symbols_before"], "leverage_bad");
+    try {
+      await trader.reconcileAll(["BTC-USD"], new Map([["BTC-USD", { symbol: "BTC-USD", side: "buy" as const, price: "100000", size: "0.001", why: "check" }]]));
+    } finally {
+      io.restore();
+    }
+    expect(io.sent.filter((s) => s.url.includes("/v2/order") && s.method === "POST")).toHaveLength(0);
+    expect((db.prepare("SELECT COUNT(*) AS n FROM orders").get() as { n: number }).n).toBe(0);
+    expect((db.prepare("SELECT COUNT(*) AS n FROM strike_calls WHERE path='/v2/leverage' AND status=400").get() as { n: number }).n).toBe(1);
+  });
+
+  it("the order goes out only after the leverage read-back", async () => {
+    const { db, ex } = exFor();
+    const trader = new Trader(db, ex, rules, { network: "testnet", markets: "all", tradingOn: () => true, pausedFile: "/nonexistent/paused", keyFile: "unused" });
+    const io = leverageReplies(["symbols_before", "symbols_after"]);
+    try {
+      await trader.reconcileAll(["BTC-USD"], new Map([["BTC-USD", { symbol: "BTC-USD", side: "buy" as const, price: "100000", size: "0.001", why: "check" }]]));
+    } finally {
+      io.restore();
+    }
+    const order = io.sent.findIndex((s) => s.method === "POST" && /\/v2\/order$/.test(s.url));
+    const readBack = io.sent.map((s, i) => (s.url.includes("/v2/symbols") ? i : -1)).filter((i) => i >= 0);
+    expect(order).toBeGreaterThan(0);
+    expect(readBack.length).toBe(2);
+    expect(readBack[1]!).toBeLessThan(order);
+    expect(io.sent[order]!.body).toMatchObject({ symbol: "BTC-USD", post_only: true });
+  });
+
+  it("with trading off on mainnet nothing is sent", async () => {
+    const { ex } = exFor("mainnet", false);
+    const io = leverageReplies(["symbols_before"]);
+    try {
+      await expect(ex.ensureLeverage("BTC-USD", 5, "cross")).rejects.toMatchObject({ code: "E-TRADING-OFF" });
+    } finally {
+      io.restore();
+    }
+    expect(io.sent).toHaveLength(0);
   });
 });

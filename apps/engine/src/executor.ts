@@ -179,6 +179,52 @@ export class Executor {
     return { reply: r.json, final: null };
   }
 
+  private readonly leverageOk = new Set<string>();
+
+  /**
+   * Sets the market's leverage before TUG trades it (rules: leverage_setting, cross margin) and reads it back
+   * from /v2/symbols. A market Strike has no setting for uses the account default. Margin mode is only checked:
+   * a market not on cross margin is refused (E-LEVERAGE), never traded. Done once per market per process.
+   */
+  async ensureLeverage(symbol: string, leverage: number, marginMode: string): Promise<{ symbol: string; before: { margin_mode: string; leverage: number }; after: { margin_mode: string; leverage: number } }> {
+    if (this.network === "mainnet" && !this.opts.trading) {
+      throw new TugError("E-TRADING-OFF", "Trading is off on mainnet; leverage is not changed.");
+    }
+    const read = async () => {
+      const j = (await this.call("GET", "/v2/symbols")).json as { default_margin_mode: string; default_leverage: number; symbol_settings?: Record<string, { margin_mode: string; leverage: number }> | null };
+      const s = j.symbol_settings?.[symbol];
+      return { margin_mode: s?.margin_mode ?? j.default_margin_mode, leverage: Number(s?.leverage ?? j.default_leverage) };
+    };
+    const before = await read();
+    let after = before;
+    if (before.margin_mode !== marginMode) {
+      throw new TugError("E-LEVERAGE", `${symbol} is on ${before.margin_mode} margin, not ${marginMode}; TUG does not trade it.`);
+    }
+    if (before.leverage !== leverage) {
+      await this.call("POST", "/v2/leverage", { symbol, leverage });
+      for (let i = 0; i < 5; i++) {
+        await sleep(this.opts.pollMs ?? 1_000);
+        after = await read();
+        if (after.leverage === leverage) break;
+      }
+      if (after.leverage !== leverage || after.margin_mode !== marginMode) {
+        throw new TugError("E-LEVERAGE", `${symbol} leverage reads ${after.leverage}x ${after.margin_mode} after asking for ${leverage}x ${marginMode}.`);
+      }
+    }
+    this.leverageOk.add(symbol);
+    logEvent(this.db, "executor", "info", `leverage ${symbol} ${after.leverage}x ${after.margin_mode}`, undefined, { symbol, before, after });
+    return { symbol, before, after };
+  }
+
+  leverageConfirmed(symbol: string): boolean {
+    return this.leverageOk.has(symbol);
+  }
+
+  /** Tests of the order path only: treat a market's leverage as already set and read back. */
+  setLeverageConfirmedForCheck(symbol: string): void {
+    this.leverageOk.add(symbol);
+  }
+
   async openOrders(symbol: string): Promise<OpenOrder[]> {
     const r = await this.call("GET", `/v2/openOrders?symbol=${encodeURIComponent(symbol)}`);
     return OpenOrdersSchema.parse(r.json).orders ?? [];
