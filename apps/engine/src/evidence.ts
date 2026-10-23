@@ -12,6 +12,9 @@ import { snapshotRows } from "./records.js";
  * the inputs and compares. Files are deterministic (sorted, gzip without a timestamp), so an unchanged day is
  * byte-identical on every export.
  *
+ * Only TUG's own accounts are in it (the live account, the testnet account and the vault): accounts people connect
+ * on /join are theirs, and their trades are never published.
+ *
  * Strike account ids in crowds and positions are replaced by a salted pseudonym (the same member gets the same
  * pseudonym everywhere, so every record still recomputes): Strike traders are never listed one by one (§12, T-PRIV).
  */
@@ -55,13 +58,13 @@ export function exportEvidence(db: Db, dir: string, o: { recordStartMs: number; 
     }
 
     const fills = db
-      .prepare("SELECT network, fill_id, trade_id, order_id, client_order_id, symbol, side, role, price, size, fee, realized_pnl, ts FROM fills ORDER BY ts, network, fill_id")
+      .prepare("SELECT network, fill_id, trade_id, order_id, client_order_id, symbol, side, role, price, size, fee, realized_pnl, ts FROM fills WHERE network IN ('mainnet','testnet','vault') ORDER BY ts, network, fill_id")
       .all() as Array<{ ts: number }>;
     for (const [d, xs] of byDay(fills, (f) => f.ts)) files.set(`fills/fills-${d}.jsonl.gz`, jsonl(xs));
-    const equity = db.prepare("SELECT network, ts, equity FROM live_equity ORDER BY ts, network").all() as Array<{ ts: number }>;
+    const equity = db.prepare("SELECT network, ts, equity FROM live_equity WHERE network IN ('mainnet','testnet','vault') ORDER BY ts, network").all() as Array<{ ts: number }>;
     for (const [d, xs] of byDay(equity, (e) => e.ts)) files.set(`equity/equity-${d}.jsonl.gz`, jsonl(xs));
     const depth = db
-      .prepare("SELECT network, ts, symbol, side, price, tug_size, at_best, best_total, top5_total FROM depth_samples ORDER BY ts, network, symbol, side")
+      .prepare("SELECT network, ts, symbol, side, price, tug_size, at_best, best_total, top5_total FROM depth_samples WHERE network IN ('mainnet','testnet','vault') ORDER BY ts, network, symbol, side")
       .all() as Array<{ ts: number; network: string; symbol: string; side: string; tug_size: number; at_best: number; best_total: number; top5_total: number }>;
     for (const [d, xs] of byDay(depth, (e) => e.ts)) files.set(`depth/depth-${d}.jsonl.gz`, jsonl(xs));
     const vaultPts = db.prepare("SELECT vault_id, ts, share_price, equity, total_shares FROM vault_points ORDER BY ts").all() as Array<{ ts: number }>;
@@ -74,7 +77,7 @@ export function exportEvidence(db: Db, dir: string, o: { recordStartMs: number; 
     const board = db.prepare("SELECT from_ts, to_ts, copy_pnl, fade_pnl, copy_up, copy_active, fade_up, fade_active, snapshots FROM scoreboard_summary WHERE id=1").get() ?? null;
     const fees = db.prepare("SELECT json FROM records_json WHERE name='fees_saved'").get() as { json: string } | undefined;
     const fillSummary = db
-      .prepare("SELECT network, COUNT(*) AS fills, COALESCE(SUM(role='maker'),0) AS maker_fills, COALESCE(SUM(fee),0) AS fees, COALESCE(SUM(realized_pnl),0) AS realized FROM fills GROUP BY network ORDER BY network")
+      .prepare("SELECT network, COUNT(*) AS fills, COALESCE(SUM(role='maker'),0) AS maker_fills, COALESCE(SUM(fee),0) AS fees, COALESCE(SUM(realized_pnl),0) AS realized FROM fills WHERE network IN ('mainnet','testnet','vault') GROUP BY network ORDER BY network")
       .all();
     const d = depthSummary(depth.filter((x) => x.network === "mainnet").map((x) => ({ ts: x.ts, symbol: x.symbol, side: x.side, tugSize: x.tug_size, atBest: x.at_best === 1, bestTotal: x.best_total, top5Total: x.top5_total })));
     const records = {

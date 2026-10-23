@@ -101,6 +101,22 @@ describe("evidence bundle and pnpm verify (real recorded snapshots)", () => {
     expect(passed.find((c) => c.name === "Strike re-read")!.ok).toBe(true);
   });
 
+  it("a connected person's account is never in the bundle: only TUG's own accounts are published", async () => {
+    const db = fixtureDb();
+    rebuildRecords(db, loaded.rules, 0, "mainnet");
+    const f = db.prepare("INSERT INTO fills (network, fill_id, trade_id, order_id, client_order_id, symbol, side, role, price, size, fee, realized_pnl, ts, raw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'null')");
+    f.run("c1a2b3c4d", 777001, 1, 888001, "tug-v1-c1a2b3c4d-1-ETH-USD-0", "ETH-USD", "buy", "maker", 2400, 0.01, -0.0012, 0, EXPORTED_AT - 7200_000);
+    db.prepare("INSERT INTO live_equity (network, ts, equity, positions_json) VALUES (?,?,?,?)").run("c1a2b3c4d", EXPORTED_AT - 7200_000, 55.5, "{}");
+    const dir = mkdtempSync(join(tmpdir(), "tug-ev-"));
+    exportEvidence(db, dir, { recordStartMs: 0, salt: "test-salt", rulesFile, now: EXPORTED_AT });
+    const text = listFiles(dir)
+      .map((p) => (p.endsWith(".gz") ? gunzipSync(readFileSync(join(dir, p))).toString("utf8") : readFileSync(join(dir, p), "utf8")))
+      .join("\n");
+    expect(text).not.toContain("c1a2b3c4d");
+    expect(text).not.toContain("777001");
+    expect((await verifyBundle(dir, opts)).filter((c) => !c.ok)).toEqual([]);
+  });
+
   it("an unchanged database exports byte-identical files (nothing to commit)", () => {
     const { db, dir, first } = bundle();
     expect(first.written.length).toBeGreaterThan(3);

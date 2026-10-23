@@ -189,8 +189,9 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
   // The event's own message is never read here: the public reply carries the code's fixed sentence only.
   const lastErrorQ = db.prepare("SELECT MAX(ts) AS ts FROM events WHERE ts>=? AND level='error'");
   const eventsQ = db.prepare("SELECT ts, network, component, level, code FROM events WHERE ts>=? AND level IN ('warn','error') ORDER BY ts DESC LIMIT 20");
-  const ordersQ = db.prepare("SELECT client_order_id, network, order_id, symbol, side, price, size, status, placed_at, updated_at FROM orders ORDER BY placed_at DESC LIMIT 10");
-  const openCountQ = db.prepare("SELECT network, COUNT(*) AS n FROM orders WHERE status IN ('pending','open','partially_filled') GROUP BY network");
+  const ordersQ = db.prepare("SELECT client_order_id, network, order_id, symbol, side, price, size, status, placed_at, updated_at FROM orders WHERE network IN ('mainnet','testnet','vault') ORDER BY placed_at DESC LIMIT 10");
+  // Public status shows TUG's own accounts only; a connected person's orders are theirs.
+  const openCountQ = db.prepare("SELECT network, COUNT(*) AS n FROM orders WHERE status IN ('pending','open','partially_filled') AND network IN ('mainnet','testnet','vault') GROUP BY network");
 
   app.get("/api/v1/status", async () => {
     const since = Date.now() - DAY;

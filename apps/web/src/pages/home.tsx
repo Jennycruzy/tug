@@ -48,7 +48,7 @@ export function Home() {
           <p class="lede">
             Strike marks some traders as worth copying and others as worth betting against. TUG watches what both
             groups hold in every market. Where they pull opposite ways, it takes the copy picks' side, with orders that
-            wait in the book.
+            wait in the book, so it adds to Strike's order books instead of taking from them.
           </p>
           <div class="cta">
             <a class="btn primary" href="https://app.strikefinance.org/public-portfolio/@tug-mainnet">

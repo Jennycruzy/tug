@@ -20,7 +20,7 @@ money, and anyone can copy it on Strike in one tap.
 | | |
 |---|---|
 | **Live on Strike mainnet, real money** | TUG's own account trades Strike's crypto and stock markets. Every fill is on [Strike's public page for the account](https://app.strikefinance.org/public-portfolio/@tug-mainnet). |
-| **Copied on Strike** | TUG is a lead trader in Strike's own copy trading. A second wallet copies it today. |
+| **Followed on Strike** | TUG is a lead trader in Strike's own copy trading. A second wallet follows it on Strike today. |
 | **Every fill a maker fill** | 10 of 10 live fills were orders that waited in the book, and each one earned Strike's maker rebate instead of paying a fee. |
 | **Cheaper than copying one by one** | Copying all 300 of Strike's copy picks with $10,000 since the record began would have meant 300 subscriptions ($6,000 in minimums) and **$9.37 in taker fees over 8,506 orders**. TUG's model account on the same $10,000 **earned $6.25** in rebates. |
 | **Strike's scores, read every 5 minutes** | 300 copy picks and 285 fade picks, on Strike and Hyperliquid, across all 33 Strike markets: 262 complete snapshots since 22 Oct. |
@@ -34,11 +34,15 @@ and in the [API](https://tug.38-49-216-59.sslip.io/api/v1/proof).
 
 ## Why it matters for Strike
 
-Strike already tells its users which traders to copy and which to bet against, but betting against a trader is
-not something Strike's copy trading can do, and copying many traders one by one runs into $20 minimums, a
-40-follower cap per trader and a taker fee on every copied order. TUG turns Strike's own scores into one position
-per market that anyone can follow with a single copy, and every order it places adds to Strike's order books
-instead of taking from them.
+**Strike's order books are thin, and TUG only adds to them.** Every TUG order is a maker order: it waits at the best
+bid or ask until someone trades with it, so it adds depth instead of taking it. All 10 of the live account's fills
+were filled that way, and every account connected to TUG trades the same way. TUG measures its share of Strike's best price
+every minute its orders wait ([Proof](https://tug.38-49-216-59.sslip.io/proof)).
+
+**It turns Strike's own scores into one position per market.** Strike already tells its users which traders to copy
+and which to bet against, but betting against a trader is not something Strike's copy trading can do, and copying
+many traders one by one runs into $20 minimums, a 40-follower cap per trader and a taker fee on every copied order.
+TUG nets both groups into a position anyone can follow with a single copy.
 
 ## How it works
 
