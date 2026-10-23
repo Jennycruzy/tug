@@ -103,7 +103,7 @@ const TOPUP = JSON.parse(readFileSync(new URL("./fixtures/live-topup-mainnet-202
 
 describe("money put in comes from Strike's deposit records (real top-up, 23 Oct)", () => {
   /** Runs the trader's own transfer sync against Strike's real reply, then serves the record. */
-  async function withTopup() {
+  async function withTopup(replies: string[] = [TOPUP.transactions_reply.raw]) {
     const db = fixtureDb();
     const eq = db.prepare("INSERT INTO live_equity (network, ts, equity, positions_json) VALUES (?,?,?,?)");
     for (const r of TOPUP.live_equity) eq.run(r.network, r.ts, r.equity, r.positions_json);
@@ -114,10 +114,10 @@ describe("money put in comes from Strike's deposit records (real top-up, 23 Oct)
     const urls: string[] = [];
     globalThis.fetch = (async (url: string) => {
       urls.push(url);
-      return new Response(TOPUP.transactions_reply.raw, { status: TOPUP.transactions_reply.status });
+      return new Response(replies[urls.length - 1], { status: TOPUP.transactions_reply.status });
     }) as typeof fetch;
     try {
-      await trader.syncTransfers();
+      for (let i = 0; i < replies.length; i++) await trader.syncTransfers();
     } finally {
       globalThis.fetch = real;
     }
@@ -157,6 +157,24 @@ describe("money put in comes from Strike's deposit records (real top-up, 23 Oct)
     expect(Math.min(...results)).toBeGreaterThan(-1);
     expect(Math.max(...results)).toBeLessThan(1);
     expect(live.links.strike_page).toBe("https://app.strikefinance.org/public-portfolio/@tug-mainnet");
+    await app.close();
+  });
+
+  it("a deposit counts as money put in only once Strike shows it settled, and the stored status follows Strike's", async () => {
+    const pending = JSON.parse(TOPUP.transactions_reply.raw) as { transactions: Array<{ id: number; status: string }> };
+    pending.transactions.find((t) => t.id === 7805172)!.status = "pending";
+    const { db } = await withTopup([JSON.stringify(pending)]);
+    let app = buildApi(db, { ...ctx, liveNickname: "tug-mainnet" });
+    let live = (await app.inject({ url: "/api/v1/record" })).json().live;
+    expect(live.money_moves.map((m: { amount: number }) => m.amount)).toEqual([18.709836]);
+    await app.close();
+    // Strike later shows the same deposit settled: the stored row is updated, not kept at its first status.
+    const { db: db2 } = await withTopup([JSON.stringify(pending), TOPUP.transactions_reply.raw]);
+    expect((db2.prepare("SELECT status FROM transfers WHERE id=7805172").get() as { status: string }).status).toBe("settled");
+    app = buildApi(db2, { ...ctx, liveNickname: "tug-mainnet" });
+    live = (await app.inject({ url: "/api/v1/record" })).json().live;
+    expect(live.money_moves.map((m: { amount: number }) => m.amount)).toEqual([18.709836, 14.083852]);
+    expect(live.start_equity).toBeCloseTo(32.793688, 9);
     await app.close();
   });
 });

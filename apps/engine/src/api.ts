@@ -263,7 +263,7 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
   const fillSumQ = db.prepare(
     "SELECT COUNT(*) AS n, SUM(role='maker') AS maker, COALESCE(SUM(fee),0) AS fees, COALESCE(SUM(realized_pnl),0) AS realized, COALESCE(SUM(price*size),0) AS traded FROM fills WHERE network=?",
   );
-  const transfersQ = db.prepare("SELECT ts, type, amount, tx_hash FROM transfers WHERE network=? AND type IN ('deposit','withdraw') ORDER BY ts, id");
+  const transfersQ = db.prepare("SELECT ts, type, amount, tx_hash FROM transfers WHERE network=? AND type IN ('deposit','withdraw') AND status='settled' ORDER BY ts, id");
   /** Links to Strike's own public records of the live account (mainnet). */
   const strikeLinks = () =>
     ctx.liveAccountId

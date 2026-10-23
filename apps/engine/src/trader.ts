@@ -307,16 +307,21 @@ export class Trader {
 
   /**
    * Pulls the account's money in and out from Strike's transaction history into `transfers`: deposits add to the
-   * money put in, withdrawals take from it. Any other kind (internal transfer, reward) is stored and flagged with
+   * money put in, withdrawals take from it, once Strike shows them settled. Any other kind (internal transfer, reward) is stored and flagged with
    * E-TRANSFER, never counted silently.
    */
   async syncTransfers(): Promise<void> {
     if (!this.accountId) return;
     const r = await this.ex.read(`/v2/history/transaction?account_id=${encodeURIComponent(this.accountId)}&type=deposit,withdraw,transfer,reward_grant&limit=100`);
     const rows = ((r as { transactions?: Array<Record<string, unknown>> | null }).transactions ?? []) as Array<Record<string, unknown>>;
-    const ins = this.db.prepare("INSERT OR IGNORE INTO transfers (network, id, type, amount, ts, status, tx_hash, raw) VALUES (?,?,?,?,?,?,?,?)");
+    const known = this.db.prepare("SELECT 1 FROM transfers WHERE network=? AND id=?");
+    // A deposit can show as pending until its Cardano settlement completes, so the stored status follows Strike's.
+    const ins = this.db.prepare(
+      "INSERT INTO transfers (network, id, type, amount, ts, status, tx_hash, raw) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT (network, id) DO UPDATE SET status=excluded.status, raw=excluded.raw",
+    );
     for (const t of rows) {
-      const added = ins.run(this.cfg.network, t.id, t.type, Number(t.amount), t.timestamp, t.status ?? null, t.tx_hash ?? null, JSON.stringify(t)).changes;
+      const added = !known.get(this.cfg.network, t.id);
+      ins.run(this.cfg.network, t.id, t.type, Number(t.amount), t.timestamp, t.status ?? null, t.tx_hash ?? null, JSON.stringify(t));
       if (added && t.type !== "deposit" && t.type !== "withdraw") {
         logEvent(this.db, "trader", "warn", `Strike recorded a ${String(t.type)} of ${String(t.amount)}; it is not counted as money put in`, "E-TRANSFER", { id: t.id, type: t.type, amount: t.amount });
       }
