@@ -91,14 +91,15 @@ function Live({ l, now }: { l: LiveRecord; now: number }) {
       </h2>
       <p class="lede">
         TUG's own Strike account{l.account ? <> (<code>{l.account}</code>, nickname tug-mainnet)</> : null}, trading by the published rules
-        since {time(l.start)} on {day(l.start)}. Every number here comes from Strike's replies, stored as they arrived.
+        since {time(l.start)} on {day(l.start)}. The result is measured against all the money put in, top-ups included.
+        Every number here comes from Strike's replies, stored as they arrived.
       </p>
       <div class="card kv">
         <span>Equity</span>
         <b>
           {cents(l.equity)} ({signed((change / l.start_equity) * 100)}%)
         </b>
-        <span>Started with</span>
+        <span>Money put in</span>
         <b>{cents(l.start_equity)}</b>
         <span>Fills</span>
         <b>

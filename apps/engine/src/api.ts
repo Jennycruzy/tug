@@ -14,7 +14,7 @@ export interface ApiContext {
   rulesVersion: number;
   recordStartMs: number;
   revision: string;
-  /** The live account's starting equity (TUG_START_EQUITY); otherwise its first stored minute. */
+  /** All money put into the live account, top-ups included (TUG_START_EQUITY); otherwise its first stored minute. */
   liveStartEquity?: number;
   /** The live account's Strike id; only a shortened form is ever served. */
   liveAccountId?: string;
