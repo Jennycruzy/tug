@@ -16,6 +16,7 @@ export const killFileFor = (network: string) => join(STATE_DIR, `KILL-${network}
 export const KILL_FILE = killFileFor(NETWORK);
 export const TRADING = process.env.TUG_TRADING === "on";
 export const STRIKE_TESTNET_URL = "https://api-v2-testnet.strikefinance.org";
+export const STRIKE_MAINNET_URL = "https://api.strikefinance.org";
 /** The vault is testnet only (§2 rule 2): a vault trader pointed anywhere but Strike testnet must not start. */
 export const vaultNetworkError = (tradeVault: boolean, strikeApiUrl: string | undefined): string | null =>
   tradeVault && strikeApiUrl !== STRIKE_TESTNET_URL ? `TUG_TRADE_VAULT is on but STRIKE_API_URL is ${strikeApiUrl ?? "unset (mainnet)"}; the vault runs on ${STRIKE_TESTNET_URL} only.` : null;

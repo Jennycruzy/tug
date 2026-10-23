@@ -506,6 +506,7 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
       return reply.code(400).send({ code: err.code ?? "E-CONN", message: err.message ?? "Your wallet connection could not be verified." });
     }
   };
+  app.get("/api/v1/connect/networks", async () => ctx.connect?.networks() ?? { testnet: false, mainnet: false });
   app.post("/api/v1/connect/start", connectStep((c, b) => c.start(b)));
   app.post("/api/v1/connect/verify", connectStep((c, b) => c.verify(b)));
   app.post("/api/v1/connect/activate", connectStep((c, b) => c.activate(b)));

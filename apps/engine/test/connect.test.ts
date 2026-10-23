@@ -264,6 +264,25 @@ describe("TUG in your account (Builder Connect)", () => {
     expect(await stopped).toBe(true);
   });
 
+  it("mainnet connections are refused until opened; once open they use Strike mainnet and the mainnet builder code, with a $1,000 budget cap", async () => {
+    const { c } = connect();
+    await expect(c.start({ network: "mainnet", chain: "cardano", address: ADDRESS })).rejects.toThrow(/testnet only/);
+    expect(c.networks()).toEqual({ testnet: true, mainnet: false });
+    const db = openDb(":memory:");
+    const open = new Connect(db, { kek: KEK, code: "tug", feeBps: 1, strikeUrl: TESTNET, mainnet: { strikeUrl: "https://api.strikefinance.org", code: "tug-main" } });
+    expect(open.networks()).toEqual({ testnet: true, mainnet: true });
+    let io = answerWith((_m, _u, body) => signatureReply(String(body?.public_key)));
+    const r = await open.start({ network: "mainnet", chain: "cardano", address: "addr1qxeqvvzmklh7vh90hmsq7kgqgrpqs0xwladsh33evwhz6gu9fz7pzym2ye4sm4tggpyr9m3r4lxal5fgvgstvm2y5qkq4gkcaw" }).finally(() => io.restore());
+    expect(io.sent[0]!.url).toBe("https://api.strikefinance.org/auth/builder/request-signature");
+    expect(io.sent[0]!.body).toMatchObject({ code: "tug-main", fee_share_bps: 1 });
+    io = answerWith(() => verifiedReply(r.public_key));
+    await open.verify({ id: r.id, token: r.token, wallet_signature: "{}".padEnd(20, " ") }).finally(() => io.restore());
+    expect(io.sent[0]!.url).toBe("https://api.strikefinance.org/auth/builder/verify-signature");
+    expect(() => open.activate({ id: r.id, token: r.token, budget_usd: 1_500, accept_risk: true })).toThrow(/at most \$1,000/);
+    expect(open.activate({ id: r.id, token: r.token, budget_usd: 1_000, accept_risk: true })).toEqual({ status: "active", budget_usd: 1_000 });
+    expect(open.view(r.id, r.token)).toMatchObject({ network: "mainnet", status: "active" });
+  });
+
   it("every order a connected account sends carries X-Builder-Fee-Bps", async () => {
     const io = answerWith(() => R.order_accepted!);
     try {
@@ -290,9 +309,12 @@ describe("TUG in your account (Builder Connect)", () => {
     await off.close();
     const { db, c } = connect();
     const on = buildApi(db, { network: "mainnet", rulesSha256: "0".repeat(64), rulesVersion: 1, recordStartMs: 0, revision: "t", connect: c });
-    const bad = await on.inject({ method: "POST", url: "/api/v1/connect/start", payload: { network: "mainnet", chain: "cardano", address: ADDRESS } });
+    const bad = await on.inject({ method: "POST", url: "/api/v1/connect/start", payload: { network: "devnet", chain: "cardano", address: ADDRESS } });
     expect(bad.statusCode).toBe(400);
     expect(bad.json().code).toBe("E-INPUT");
+    const closed = await on.inject({ method: "POST", url: "/api/v1/connect/start", payload: { network: "mainnet", chain: "cardano", address: ADDRESS } });
+    expect(closed.json()).toMatchObject({ code: "E-CONN", message: "TUG in your account is open on testnet only right now." });
+    expect((await on.inject({ url: "/api/v1/connect/networks" })).json()).toEqual({ testnet: true, mainnet: false });
     await on.close();
   });
 });

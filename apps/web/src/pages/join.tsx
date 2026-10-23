@@ -7,6 +7,7 @@ const SAVED = "tug-connection";
 
 interface ConnectView {
   id: string;
+  network: "testnet" | "mainnet";
   status: "signing" | "verified" | "active" | "stopping" | "ended" | "failed";
   account: string | null;
   budget_usd: number | null;
@@ -107,6 +108,9 @@ function Vault() {
 }
 
 function InYourAccount() {
+  const nets = useApi<{ testnet: boolean; mainnet: boolean }>("/api/v1/connect/networks", 300_000);
+  const mainnetOpen = nets.state === "ok" && nets.data.mainnet;
+  const [network, setNetwork] = useState<"testnet" | "mainnet">("testnet");
   const [saved, setSaved] = useState(load());
   const [wallets, setWallets] = useState<WalletChoice[]>([]);
   const [view, setView] = useState<ConnectView | null>(null);
@@ -118,9 +122,9 @@ function InYourAccount() {
 
   // Wallet extensions add themselves a moment after the page loads.
   useEffect(() => {
-    const t = setTimeout(() => setWallets(walletsInBrowser()), 600);
+    const t = setTimeout(() => setWallets(walletsInBrowser(network)), 600);
     return () => clearTimeout(t);
-  }, []);
+  }, [network]);
 
   const refresh = async (s = saved) => {
     if (!s) return;
@@ -153,7 +157,7 @@ function InYourAccount() {
   const connectWith = (w: WalletChoice) =>
     step(`Connecting ${w.label}…`, async () => {
       const wallet = await w.connect();
-      const s = await post<{ id: string; token: string; message_to_sign: string }>("/api/v1/connect/start", { network: "testnet", chain: w.chain, address: wallet.address });
+      const s = await post<{ id: string; token: string; message_to_sign: string }>("/api/v1/connect/start", { network, chain: w.chain, address: wallet.address });
       save({ id: s.id, token: s.token });
       setSaved({ id: s.id, token: s.token });
       setBusy("Sign the message in your wallet…");
@@ -174,6 +178,9 @@ function InYourAccount() {
       await refresh();
     });
 
+  // An existing connection keeps its own network; the choice applies to a new one.
+  const net = view && view.status !== "ended" && view.status !== "failed" ? view.network : network;
+  const keysPage = net === "mainnet" ? "https://app.strikefinance.org/api-keys" : "https://testnet.strikefinance.org/api-keys";
   const forget = () => {
     save(null);
     setSaved(null);
@@ -183,15 +190,24 @@ function InYourAccount() {
   return (
     <>
       <h2>
-        3. TUG in your account <span class="tag">TESTNET</span>
+        3. TUG in your account {!mainnetOpen && <span class="tag">TESTNET</span>}
       </h2>
       <p>
-        Connect your own wallet and TUG trades your own Strike testnet account by the same rules, within a budget you set.
-        Your wallet signs one message from Strike that lets TUG place orders for you; it cannot withdraw. TUG keeps that
-        trading key encrypted and deletes its copy when you press Stop; the key stays listed on your Strike account until
-        you remove it on <a href="https://testnet.strikefinance.org/api-keys">Strike's API keys page</a>. TUG's builder fee
-        is 0.01% of each trade.
+        Connect your own wallet and TUG trades your own Strike account by the same rules, within a budget you set. Your
+        wallet signs one message from Strike that gives TUG a key for your account. TUG uses it only to place and cancel
+        orders, never to move your money. TUG keeps the key encrypted and deletes its copy when you press Stop; the key
+        stays listed on your Strike account until you remove it on <a href={keysPage}>Strike's API keys page</a>. TUG's
+        builder fee is 0.01% of each trade.
       </p>
+      {mainnetOpen && (!view || view.status === "ended" || view.status === "failed") && (
+        <div class="cta" role="radiogroup" aria-label="Network">
+          {(["mainnet", "testnet"] as const).map((n) => (
+            <button key={n} type="button" class={`btn ${network === n ? "primary" : ""}`} aria-pressed={network === n} onClick={() => setNetwork(n)}>
+              {n === "mainnet" ? "Mainnet (real money)" : "Testnet (test money)"}
+            </button>
+          ))}
+        </div>
+      )}
       {err && <p class="note err">{err}</p>}
       {busy && <p class="note">{busy}</p>}
 
@@ -200,7 +216,7 @@ function InYourAccount() {
           {view?.status === "ended" && (
             <p class="note">
               Stopped. TUG cancelled {view.stop_report?.cancelled?.length ?? 0} order(s){view.stop_report?.closed?.length ? ` and closed ${view.stop_report.closed.join(", ")}` : ""}, and deleted its copy of the key. To remove the key from your Strike account too, open{" "}
-              <a href={view.stop_report?.strike_api_keys_page ?? "https://testnet.strikefinance.org/api-keys"}>Strike's API keys page</a>.{" "}
+              <a href={view.stop_report?.strike_api_keys_page ?? keysPage}>Strike's API keys page</a>.{" "}
               <button class="linkish" type="button" onClick={forget}>
                 Start again
               </button>
@@ -208,7 +224,9 @@ function InYourAccount() {
           )}
           {view?.status === "failed" && <p class="note err">The wallet signature was not accepted ({view.error}). Try again.</p>}
           {wallets.length === 0 ? (
-            <p class="note">No wallet found in this browser. Install Eternl or Lace (Cardano, Preprod), MetaMask (Ethereum) or Phantom (Solana), then reload.</p>
+            <p class="note">
+              No wallet found in this browser. Install Eternl or Lace (Cardano{network === "testnet" ? ", Preprod" : ""}), MetaMask (Ethereum) or Phantom (Solana), then reload.
+            </p>
           ) : (
             <div class="cta">
               {wallets.map((w) => (
@@ -218,7 +236,11 @@ function InYourAccount() {
               ))}
             </div>
           )}
-          <p class="fine">You need a Strike testnet account with test money: deposit tADA from the Cardano Preprod faucet at testnet.strikefinance.org.</p>
+          <p class="fine">
+            {network === "mainnet"
+              ? "You need money on Strike: deposit on app.strikefinance.org first. TUG trades it within your budget, at most $1,000."
+              : "You need a Strike testnet account with test money: deposit tADA from the Cardano Preprod faucet at testnet.strikefinance.org."}
+          </p>
         </>
       )}
 
@@ -237,12 +259,12 @@ function InYourAccount() {
             Connected: Strike account <code>{view.account}</code>. Set a budget and start.
           </p>
           <label class="field">
-            Budget (USD, test money)
-            <input type="number" min={10} max={10000} step={1} value={budget} onInput={(e) => setBudget((e.target as HTMLInputElement).value)} />
+            Budget (USD{net === "mainnet" ? ", real money, at most $1,000" : ", test money"})
+            <input type="number" min={10} max={net === "mainnet" ? 1000 : 10000} step={1} value={budget} onInput={(e) => setBudget((e.target as HTMLInputElement).value)} />
           </label>
           <label class="check">
             <input type="checkbox" checked={accept} onChange={(e) => setAccept((e.target as HTMLInputElement).checked)} />
-            I understand TUG will place orders in my Strike testnet account, sized on this budget and never past it times two, and that perpetuals can lose all deposited funds.
+            I understand TUG will place orders in my Strike {net === "mainnet" ? "account with real money" : "testnet account"}, sized on this budget and never past it times two, and that perpetuals can lose all deposited funds.
           </label>
           <p>
             <button class="btn primary" type="button" disabled={!accept || !!busy || !(Number(budget) >= 10)} onClick={() => void start()}>

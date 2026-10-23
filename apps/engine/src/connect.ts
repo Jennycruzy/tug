@@ -5,7 +5,7 @@ import { z } from "zod";
 import { logEvent, type Db } from "./db.js";
 
 /**
- * TUG in your account (Builder Connect, §11.3). The server makes an Ed25519 key pair for each connection, asks
+ * TUG in your account (Builder Connect, §11.3), on Strike testnet, and on mainnet once it is opened. The server makes an Ed25519 key pair for each connection, asks
  * Strike for the consent message, the person's own wallet signs it, and Strike registers the public key on their
  * account under TUG's builder code. The private key is stored only encrypted (AES-256-GCM with TUG_KEK), is
  * decrypted in memory by the connection runner, and is deleted on Stop. Each connection is controlled by a random
@@ -36,9 +36,10 @@ export function kekFrom(value: string | undefined): Buffer {
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 const MAX_ACTIVE = 20;
+export const MAINNET_MAX_BUDGET = 1_000;
 
 export const StartBody = z.object({
-  network: z.literal("testnet"),
+  network: z.enum(["testnet", "mainnet"]),
   chain: z.enum(["cardano", "ethereum", "solana"]),
   address: z.string().min(20).max(200).regex(/^[A-Za-z0-9_]+$/),
 });
@@ -72,14 +73,34 @@ export interface ConnectRow {
 export class Connect {
   constructor(
     private readonly db: Db,
-    private readonly o: { kek: Buffer; code: string; feeBps: number; strikeUrl: string },
+    private readonly o: {
+      kek: Buffer;
+      code: string;
+      feeBps: number;
+      strikeUrl: string;
+      /** Mainnet connections: Strike's mainnet API and TUG's mainnet builder code, open only when set (TUG_CONNECT_MAINNET=on). */
+      mainnet?: { strikeUrl: string; code: string };
+    },
   ) {
     // A deleted key's ciphertext is overwritten in the database file, not just unlinked.
     this.db.pragma("secure_delete = ON");
   }
 
-  private async strike(path: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
-    const r = await fetch(this.o.strikeUrl + path, { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
+  /** Which networks people can connect on right now. */
+  networks(): { testnet: true; mainnet: boolean } {
+    return { testnet: true, mainnet: this.o.mainnet !== undefined };
+  }
+
+  private target(network: string): { strikeUrl: string; code: string } {
+    if (network === "mainnet") {
+      if (!this.o.mainnet) throw new TugError("E-CONN", "TUG in your account is open on testnet only right now.");
+      return this.o.mainnet;
+    }
+    return { strikeUrl: this.o.strikeUrl, code: this.o.code };
+  }
+
+  private async strike(network: string, path: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
+    const r = await fetch(this.target(network).strikeUrl + path, { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
     const text = await r.text();
     let json: Record<string, unknown> = {};
     try {
@@ -105,7 +126,7 @@ export class Connect {
     if (active >= MAX_ACTIVE) throw new TugError("E-CONN", `TUG runs at most ${MAX_ACTIVE} accounts per network; try again later.`);
     const secret = randomBytes(32).toString("hex");
     const pub = keyFromHex(secret).publicKeyHex;
-    const r = await this.strike("/auth/builder/request-signature", { address: b.address, chain: b.chain, code: this.o.code, fee_share_bps: this.o.feeBps, public_key: pub });
+    const r = await this.strike(b.network, "/auth/builder/request-signature", { address: b.address, chain: b.chain, code: this.target(b.network).code, fee_share_bps: this.o.feeBps, public_key: pub });
     if (r.status !== 200 || typeof r.json.message_to_sign !== "string" || typeof r.json.nonce !== "string") {
       throw new TugError("E-CONN", `Strike did not start the connection: ${String(r.json.error ?? r.status)}`);
     }
@@ -126,7 +147,7 @@ export class Connect {
     const b = VerifyBody.parse(input);
     const row = this.owned(b.id, b.token);
     if (row.status !== "signing" || !row.nonce) throw new TugError("E-CONN", "This connection is not waiting for a signature.");
-    const r = await this.strike("/auth/builder/verify-signature", { nonce: row.nonce, wallet_signature: b.wallet_signature });
+    const r = await this.strike(row.network, "/auth/builder/verify-signature", { nonce: row.nonce, wallet_signature: b.wallet_signature });
     const now = Date.now();
     if (r.status !== 200 || typeof r.json.account_id !== "string" || r.json.api_wallet_public_key !== row.api_pubkey) {
       // Strike's challenge is single-use: a failed attempt ends this connection; the key is deleted.
@@ -146,6 +167,8 @@ export class Connect {
     const b = ActivateBody.parse(input);
     const row = this.owned(b.id, b.token);
     if (row.status !== "verified") throw new TugError("E-CONN", "Connect a wallet first.");
+    // Real money: a mainnet budget is capped lower than a testnet one.
+    if (row.network === "mainnet" && b.budget_usd > MAINNET_MAX_BUDGET) throw new TugError("E-BUDGET", `On mainnet the budget is at most $${MAINNET_MAX_BUDGET.toLocaleString("en-US")}.`);
     const now = Date.now();
     this.db.prepare("UPDATE connections SET status='active', budget_usd=?, started_at=?, updated_at=? WHERE id=?").run(b.budget_usd, now, now, row.id);
     logEvent(this.db, "connect", "info", "connection active", undefined, { id: row.id, budget: b.budget_usd });

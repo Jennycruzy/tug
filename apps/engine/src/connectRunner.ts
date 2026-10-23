@@ -1,13 +1,14 @@
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import type { Rules } from "@tug/core";
-import { StrikeSigned } from "@tug/strike";
+import { markets as strikeMarkets, StrikeSigned } from "@tug/strike";
 import { connectionNetwork, decryptKey, type ConnectRow } from "./connect.js";
 import { logEvent, type Db } from "./db.js";
 import { Executor } from "./executor.js";
 import { Trader } from "./trader.js";
 
-export const STRIKE_API_KEYS_PAGE = "https://testnet.strikefinance.org/api-keys";
+/** Strike's page where a person removes an API key from their own account (Strike's app route /api-keys). */
+export const strikeApiKeysPage = (network: string) => (network === "mainnet" ? "https://app.strikefinance.org/api-keys" : "https://testnet.strikefinance.org/api-keys");
 export const STRIKE_KEY_NOTE = "TUG deleted its copy of the trading key. The key stays listed on your Strike account until you remove it on Strike's API keys page.";
 
 interface StopReport {
@@ -23,8 +24,9 @@ interface StopReport {
 }
 
 /**
- * Runs every connected account (`tug-trader@connect`, Strike testnet only): one Trader per active connection, on
- * the rules' testnet markets, sized on the budget cap and never past it, with the builder fee on every order.
+ * Runs every connected account of one network (`tug-connect` for testnet, `tug-connect-mainnet`): one Trader per
+ * active connection, on every market (testnet: the rules' testnet markets), sized on the budget cap and never past
+ * it, with the builder fee on every order.
  * A connection marked stopping is wound down here: TUG's orders are cancelled, positions are closed if the person
  * asked, and the encrypted key is deleted.
  */
@@ -36,7 +38,7 @@ export class ConnectRunner {
   constructor(
     private readonly db: Db,
     private readonly rules: Rules,
-    private readonly o: { kek: Buffer; strikeUrl: string; feeBps: number; stateDir: string; killFile: string; pollMs?: number },
+    private readonly o: { kek: Buffer; strikeUrl: string; feeBps: number; stateDir: string; killFile: string; pollMs?: number; network?: "testnet" | "mainnet" },
   ) {
     // A deleted key's ciphertext is overwritten in the database file, not just unlinked.
     this.db.pragma("secure_delete = ON");
@@ -48,7 +50,7 @@ export class ConnectRunner {
     const ex = new Executor(this.db, new StrikeSigned(hex, this.o.strikeUrl, undefined, this.o.feeBps), net, { trading: true, killFile: this.o.killFile, pollMs: this.o.pollMs });
     const trader = new Trader(this.db, ex, this.rules, {
       network: net,
-      markets: this.rules.testnet_markets,
+      markets: this.network === "mainnet" ? "all" : this.rules.testnet_markets,
       tradingOn: () => !existsSync(this.o.killFile),
       pausedFile: join(this.o.stateDir, `PAUSED-${net}`),
       keyFile: { hex },
@@ -61,7 +63,7 @@ export class ConnectRunner {
   /** One pass: expire unsigned connections, start new active ones, wind down stopping ones. */
   async tick(): Promise<void> {
     this.expireSigning();
-    const rows = this.db.prepare("SELECT * FROM connections WHERE status IN ('active','stopping') AND network='testnet'").all() as ConnectRow[];
+    const rows = this.db.prepare("SELECT * FROM connections WHERE status IN ('active','stopping') AND network=?").all(this.network) as ConnectRow[];
     for (const row of rows) {
       try {
         if (row.status === "active" && !this.running.has(row.id) && row.enc_privkey) {
@@ -100,23 +102,24 @@ export class ConnectRunner {
     const r = running ?? (row.enc_privkey ? this.build(row) : undefined);
     const tries = (this.stopTries.get(row.id) ?? 0) + 1;
     this.stopTries.set(row.id, tries);
-    const report: StopReport = { at: Date.now(), tries, cancelled: [], closed: [], open_orders_after: 0, positions_after: [], key: "kept", strike_key_note: STRIKE_KEY_NOTE, strike_api_keys_page: STRIKE_API_KEYS_PAGE };
+    const report: StopReport = { at: Date.now(), tries, cancelled: [], closed: [], open_orders_after: 0, positions_after: [], key: "kept", strike_key_note: STRIKE_KEY_NOTE, strike_api_keys_page: strikeApiKeysPage(this.network) };
     if (r) {
       const prefix = `tug-v${this.rules.version}-${connectionNetwork(row.id)}-`;
-      for (const s of this.rules.testnet_markets) {
+      const symbols = await this.symbols();
+      for (const s of symbols) {
         for (const o of (await r.ex.openOrders(s)).filter((x) => x.ClientOrderID.startsWith(prefix))) {
           await r.ex.cancel(s, o.ClientOrderID);
           report.cancelled.push(o.ClientOrderID);
         }
       }
       if (row.close_on_stop) {
-        for (const s of Object.keys(await r.ex.positions()).filter((x) => this.rules.testnet_markets.includes(x))) {
+        for (const s of Object.keys(await r.ex.positions()).filter((x) => symbols.includes(x))) {
           await r.ex.riskExit(s, `${prefix}${Date.now()}-stop-${s}`.slice(0, 64), "closed on Stop", undefined, "E-EXIT");
           report.closed.push(s);
         }
       }
-      for (const s of this.rules.testnet_markets) report.open_orders_after += (await r.ex.openOrders(s)).filter((x) => x.ClientOrderID.startsWith(prefix)).length;
-      report.positions_after = Object.keys(await r.ex.positions()).filter((x) => this.rules.testnet_markets.includes(x));
+      for (const s of symbols) report.open_orders_after += (await r.ex.openOrders(s)).filter((x) => x.ClientOrderID.startsWith(prefix)).length;
+      report.positions_after = Object.keys(await r.ex.positions()).filter((x) => symbols.includes(x));
     }
     const now = Date.now();
     const clear = report.open_orders_after === 0 && (!row.close_on_stop || report.positions_after.length === 0);
@@ -135,6 +138,15 @@ export class ConnectRunner {
     this.stopLoggedAt.delete(row.id);
     this.db.prepare("UPDATE connections SET status='ended', enc_privkey=NULL, stop_report=?, ended_at=?, updated_at=? WHERE id=?").run(JSON.stringify(report), now, now, row.id);
     logEvent(this.db, "connect", "info", "connection ended: TUG's copy of the key deleted", undefined, { id: row.id, ...report });
+  }
+
+  private get network(): "testnet" | "mainnet" {
+    return this.o.network ?? "testnet";
+  }
+
+  /** The markets TUG may hold on this network: every Strike market on mainnet, the rules' testnet markets on testnet. */
+  private async symbols(): Promise<string[]> {
+    return this.network === "mainnet" ? Object.keys((await strikeMarkets()).markets) : this.rules.testnet_markets;
   }
 
   /** A connection whose wallet never signed keeps no key: after 15 minutes it ends as failed and the key is deleted. */

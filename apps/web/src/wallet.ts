@@ -80,8 +80,8 @@ export function base58(bytes: Uint8Array): string {
   return out;
 }
 
-/** The wallets this browser has, testnet only (a Cardano wallet must be on a test network). */
-export function walletsInBrowser(): WalletChoice[] {
+/** The wallets this browser has; a Cardano wallet must be on the chosen network (Preprod for testnet). */
+export function walletsInBrowser(network: "testnet" | "mainnet" = "testnet"): WalletChoice[] {
   const out: WalletChoice[] = [];
   for (const [id, w] of Object.entries(window.cardano ?? {})) {
     if (!w || typeof w.enable !== "function" || id === "typhoncip30") continue;
@@ -91,9 +91,12 @@ export function walletsInBrowser(): WalletChoice[] {
       chain: "cardano",
       connect: async () => {
         const api = await w.enable();
-        if ((await api.getNetworkId()) !== 0) throw new Error("Switch this wallet to the Cardano test network (Preprod) and try again.");
+        const want = network === "mainnet" ? 1 : 0;
+        if ((await api.getNetworkId()) !== want) {
+          throw new Error(network === "mainnet" ? "Switch this wallet to Cardano mainnet and try again." : "Switch this wallet to the Cardano test network (Preprod) and try again.");
+        }
         const raw = (await api.getUsedAddresses())[0] ?? (await api.getUnusedAddresses())[0] ?? (await api.getChangeAddress());
-        const address = bech32("addr_test", fromHex(raw));
+        const address = bech32(network === "mainnet" ? "addr" : "addr_test", fromHex(raw));
         return { address, sign: async (m) => JSON.stringify(await api.signData(raw, hex(utf8(m)))) };
       },
     });
