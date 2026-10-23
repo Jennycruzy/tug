@@ -123,9 +123,43 @@ export interface PaperSummary {
   positions: Array<{ symbol: string; notional: number }>;
 }
 
+export interface LiveRecord {
+  label: "LIVE" | "TESTNET";
+  account: string | null;
+  start_equity: number;
+  start: number;
+  at: number;
+  equity: number;
+  fills: number;
+  maker_fills: number;
+  traded: number;
+  fees: number;
+  realized: number;
+  positions: Array<{ symbol: string; size: number; entry: number; upnl: number }>;
+  curve: Array<{ at: number; equity: number }>;
+}
+
+export interface Fill {
+  at: number;
+  symbol: string;
+  side: string;
+  role: string | null;
+  price: number;
+  size: number;
+  fee: number;
+  realized: number;
+  order_id: number | null;
+  client_order_id: string | null;
+}
+
+export interface FillsReply {
+  network: "mainnet" | "testnet";
+  fills: Fill[];
+}
+
 export interface RecordReply {
   network: "mainnet" | "testnet";
-  live: null;
+  live: LiveRecord | null;
   vault: null;
   paper: (PaperSummary & { curve: Array<{ at: number; equity: number }> }) | null;
 }

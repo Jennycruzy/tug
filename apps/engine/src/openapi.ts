@@ -82,13 +82,40 @@ const schemas: Record<string, Schema> = {
     }),
   }),
   RecordPaper: obj({ ...paperSummary, curve: arr(obj({ at: int, equity: num })) }),
+  RecordLive: obj({
+    label: { type: "string", enum: ["LIVE", "TESTNET"] },
+    account: nullable(str),
+    start_equity: num,
+    start: int,
+    at: int,
+    equity: num,
+    fills: int,
+    maker_fills: int,
+    traded: num,
+    fees: num,
+    realized: num,
+    positions: arr(obj({ symbol: str, size: num, entry: num, upnl: num })),
+    curve: arr(obj({ at: int, equity: num })),
+  }),
+  Fill: obj({
+    at: int,
+    symbol: str,
+    side: str,
+    role: nullable(str),
+    price: num,
+    size: num,
+    fee: num,
+    realized: num,
+    order_id: nullable(int),
+    client_order_id: nullable(str),
+  }),
   Record: obj({
     network: { type: "string", enum: ["mainnet", "testnet"] },
-    live: { type: "null" },
+    live: nullOr(ref("RecordLive")),
     vault: { type: "null" },
     paper: nullOr(ref("RecordPaper")),
   }),
-  Fills: obj({ network: { type: "string", enum: ["mainnet", "testnet"] }, fills: arr({ type: "object" }) }),
+  Fills: obj({ network: { type: "string", enum: ["mainnet", "testnet"] }, fills: arr(ref("Fill")) }),
   Paper: {
     type: "object",
     additionalProperties: false,
@@ -223,8 +250,10 @@ OpenAPI 3.1: https://tug.38-49-216-59.sslip.io/api/openapi.json
   to +1, members holding), the gap, whether TUG trades it, and TUG's position. Sorted by the size of the gap.
 - GET /api/v1/tug/ETH-USD: one market, the largest members, and 24 hours of lean history.
 - GET /api/v1/crowds: the current crowd lists, built from Strike's /v2/copy/discover scores and tags.
-- GET /api/v1/record: records. "paper" is labelled MODEL: a calculation from real Strike prices, not trades.
-- GET /api/v1/record/fills: fills with Strike order ids.
+- GET /api/v1/record: records. "live" is the real account (label LIVE on mainnet, TESTNET on testnet): equity, fills,
+  fees (negative = maker rebate), realized result, positions. "paper" is labelled MODEL: a calculation from real
+  Strike prices, not trades.
+- GET /api/v1/record/fills: the live account's fills, newest first, with Strike order ids (fee negative = rebate).
 - GET /api/v1/paper: the paper record (MODEL) with the targets of the last rebalance.
 - GET /api/v1/scoreboard: how Strike's copy picks and fade picks did since the record started, per market.
 - GET /api/v1/proof: the rules fingerprint (SHA-256, published before the record started), the market

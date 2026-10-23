@@ -98,7 +98,15 @@ scheduleAligned();
 
 // The mainnet instance serves the public API; the site reads only from it.
 if (NETWORK === "mainnet") {
-  const api = await startApi(db, { network: NETWORK, rulesSha256: fp.sha256, rulesVersion: fp.version, recordStartMs, revision: REVISION }, API_PORT);
+  const api = await startApi(db, {
+      network: NETWORK,
+      rulesSha256: fp.sha256,
+      rulesVersion: fp.version,
+      recordStartMs,
+      revision: REVISION,
+      liveStartEquity: process.env.TUG_START_EQUITY ? Number(process.env.TUG_START_EQUITY) : undefined,
+      liveAccountId: process.env.TUG_ACCOUNT_ID,
+    }, API_PORT);
   log("api listening", { port: API_PORT });
   process.on("exit", () => void api.close());
 }

@@ -256,3 +256,8 @@ pre.code { overflow-x: auto; white-space: pre; font: 12px/1.45 var(--mono); marg
 
 /* Reading pages keep a narrower measure than the landing page */
 main > .page:not(.wide) { max-width: 820px; }
+
+/* The live record */
+.tag.live { background: var(--copy); color: var(--card); }
+.scroll { overflow-x: auto; }
+.scroll table { min-width: 520px; }

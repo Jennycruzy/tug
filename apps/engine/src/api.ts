@@ -14,6 +14,10 @@ export interface ApiContext {
   rulesVersion: number;
   recordStartMs: number;
   revision: string;
+  /** The live account's starting equity (TUG_START_EQUITY); otherwise its first stored minute. */
+  liveStartEquity?: number;
+  /** The live account's Strike id; only a shortened form is ever served. */
+  liveAccountId?: string;
 }
 
 interface SnapshotRow {
@@ -70,9 +74,18 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
 
   const latest = () => latestQ.get(ctx.network) as SnapshotRow | undefined;
 
-  const marketRow = (l: LeanDbRow, marks: Map<string, { mark: number; funding_rate: number | null; bid: number | null; ask: number | null }>, model: Record<string, number>) => {
+  const liveLastQ = db.prepare("SELECT ts, equity, positions_json FROM live_equity WHERE network=? ORDER BY ts DESC LIMIT 1");
+  /** The live account's positions at its latest stored minute (signed size per market). */
+  const livePositions = (network: string): Record<string, { size: string; entry: number; upnl: number }> => {
+    const r = liveLastQ.get(network) as { positions_json: string } | undefined;
+    return r ? (JSON.parse(r.positions_json) as Record<string, { size: string; entry: number; upnl: number }>) : {};
+  };
+  const side = (v: number) => (v > 0 ? "long" : v < 0 ? "short" : "flat") as "long" | "short" | "flat";
+
+  const marketRow = (l: LeanDbRow, marks: Map<string, { mark: number; funding_rate: number | null; bid: number | null; ask: number | null }>, model: Record<string, number>, live: Record<string, { size: string }>) => {
     const k = marks.get(l.symbol);
     const modelNotional = model[l.symbol] ?? 0;
+    const liveNotional = live[l.symbol] && k?.mark ? Number(live[l.symbol]!.size) * k.mark : 0;
     return {
       symbol: l.symbol,
       copy: { long: l.long_copy, short: l.short_copy, lean: l.lean_copy, n: l.n_copy },
@@ -84,8 +97,8 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
       funding_rate: k?.funding_rate ?? null,
       bid: k?.bid ?? null,
       ask: k?.ask ?? null,
-      // Live trading has not started: the live position is flat. The model position is the paper record's.
-      position: { live: { side: "flat", notional: 0 }, model: { side: modelNotional > 0 ? "long" : modelNotional < 0 ? "short" : "flat", notional: modelNotional } },
+      // The live position is the live account's at its latest stored minute; the model position is the paper record's.
+      position: { live: { side: side(liveNotional), notional: liveNotional }, model: { side: side(modelNotional), notional: modelNotional } },
     };
   };
 
@@ -99,7 +112,8 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
     if (!s) return reply.code(503).send({ code: "E-NO-DATA", message: "No complete snapshot yet; the first one lands within 5 minutes." });
     const marks = new Map((marksQ.all(s.id) as Array<{ symbol: string; mark: number; funding_rate: number | null; bid: number | null; ask: number | null }>).map((m) => [m.symbol, m]));
     const model = loadModel();
-    const rows = (leansQ.all(s.id) as LeanDbRow[]).map((l) => marketRow(l, marks, model.positions));
+    const live = ctx.network === "mainnet" ? livePositions("mainnet") : {};
+    const rows = (leansQ.all(s.id) as LeanDbRow[]).map((l) => marketRow(l, marks, model.positions, live));
     rows.sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap) || a.symbol.localeCompare(b.symbol));
     return {
       network: ctx.network,
@@ -107,7 +121,7 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
       rules: { version: ctx.rulesVersion, sha256: ctx.rulesSha256, record_start: ctx.recordStartMs },
       crowds: crowdQ.get(s.crowd_version) ?? null,
       model: model.row ? { equity: model.row.equity, start_equity: 10_000, at: model.row.ts } : null,
-      live: { trading: TRADING, account: null },
+      live: { trading: TRADING && !existsSync(killFileFor(ctx.network)), account: ctx.liveAccountId ? short(ctx.liveAccountId) : null },
       markets: rows,
     };
   });
@@ -146,7 +160,7 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
     return {
       network: ctx.network,
       snapshot: { id: s.id, at: s.started_at },
-      market: marketRow(l, marks, loadModel().positions),
+      market: marketRow(l, marks, loadModel().positions, ctx.network === "mainnet" ? livePositions("mainnet") : {}),
       top: { copy: top("copy"), fade: top("fade") },
       // Strike's own copy picks are listed by shortened id; Strike accounts on the fade side only in aggregate.
       strike: {
@@ -240,14 +254,48 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
     };
   });
 
+  const liveCurveQ = db.prepare("SELECT ts, equity FROM live_equity WHERE network=? ORDER BY ts");
+  const fillsQ = db.prepare(
+    "SELECT ts, symbol, side, role, price, size, fee, realized_pnl, order_id, client_order_id FROM fills WHERE network=? ORDER BY ts DESC, fill_id DESC LIMIT 500",
+  );
+  const fillSumQ = db.prepare(
+    "SELECT COUNT(*) AS n, SUM(role='maker') AS maker, COALESCE(SUM(fee),0) AS fees, COALESCE(SUM(realized_pnl),0) AS realized, COALESCE(SUM(price*size),0) AS traded FROM fills WHERE network=?",
+  );
+  /** The live account's record from stored rows only: equity each minute (one point per 5 minutes served), fills, positions. */
+  const liveRecord = (network: string) => {
+    const curve = liveCurveQ.all(network) as Array<{ ts: number; equity: number }>;
+    if (curve.length === 0) return null;
+    const first = curve[0]!;
+    const last = curve[curve.length - 1]!;
+    const f = fillSumQ.get(network) as { n: number; maker: number | null; fees: number; realized: number; traded: number };
+    const startEquity = network === "mainnet" && ctx.liveStartEquity ? ctx.liveStartEquity : first.equity;
+    const step = 5 * 60_000;
+    const thinned = curve.filter((p, i) => i === 0 || i === curve.length - 1 || Math.floor(p.ts / step) !== Math.floor(curve[i - 1]!.ts / step));
+    return {
+      label: network === "mainnet" ? "LIVE" : "TESTNET",
+      account: network === "mainnet" && ctx.liveAccountId ? short(ctx.liveAccountId) : null,
+      start_equity: startEquity,
+      start: first.ts,
+      at: last.ts,
+      equity: last.equity,
+      fills: f.n,
+      maker_fills: f.maker ?? 0,
+      traded: f.traded,
+      fees: f.fees,
+      realized: f.realized,
+      positions: Object.entries(livePositions(network)).map(([symbol, p]) => ({ symbol, size: Number(p.size), entry: p.entry, upnl: p.upnl })),
+      curve: thinned.map((p) => ({ at: p.ts, equity: p.equity })),
+    };
+  };
+
   app.get<{ Querystring: { network?: string } }>("/api/v1/record", async (req, reply) => {
     const network = req.query.network ?? "mainnet";
     if (network !== "mainnet" && network !== "testnet") return reply.code(400).send({ code: "E-NETWORK", message: "network is mainnet or testnet." });
     const curve = (paperAllQ.all() as Array<{ ts: number; equity: number }>).map((p) => ({ at: p.ts, equity: p.equity }));
     return {
       network,
-      // The live account (mainnet) and the vault (testnet) appear here once they have traded.
-      live: null,
+      // The live account: real money on mainnet, test money on testnet (labelled TESTNET). The vault comes later.
+      live: liveRecord(network),
       vault: null,
       paper: network === "mainnet" && paperSummary() ? { ...paperSummary()!, curve } : null,
     };
@@ -256,7 +304,9 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
   app.get<{ Querystring: { network?: string } }>("/api/v1/record/fills", async (req, reply) => {
     const network = req.query.network ?? "mainnet";
     if (network !== "mainnet" && network !== "testnet") return reply.code(400).send({ code: "E-NETWORK", message: "network is mainnet or testnet." });
-    return { network, fills: [] as unknown[] };
+    const fills = fillsQ.all(network) as Array<{ ts: number; symbol: string; side: string; role: string | null; price: number; size: number; fee: number; realized_pnl: number; order_id: number | null; client_order_id: string | null }>;
+    // Negative fee = maker rebate. Strike's fill history can omit the client order id; Strike's order id is always kept.
+    return { network, fills: fills.map((x) => ({ at: x.ts, symbol: x.symbol, side: x.side, role: x.role, price: x.price, size: x.size, fee: x.fee, realized: x.realized_pnl, order_id: x.order_id, client_order_id: x.client_order_id })) };
   });
 
   app.get("/api/v1/paper", async () => {
