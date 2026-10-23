@@ -21,7 +21,7 @@ money, and anyone can copy it on Strike in one tap.
 | | |
 |---|---|
 | **Live on Strike mainnet, real money** | TUG's own account trades Strike's crypto and stock markets. Every fill is on [Strike's public page for the account](https://app.strikefinance.org/public-portfolio/@tug-mainnet). |
-| **Followed on Strike** | TUG is a lead trader in Strike's own copy trading. A second wallet follows it on Strike today. |
+| **Copied on Strike** | TUG is a lead trader in Strike's own copy trading. A second wallet copies it: when TUG bought CRCL at 12:17 UTC on 23 Oct, Strike copied the trade into that wallet's account a tenth of a second later ([TUG's fill and the copy](docs/proof.md#copied-on-strike)). |
 | **Every fill a maker fill** | 10 of 10 live fills were orders that waited in the book, and each one earned Strike's maker rebate instead of paying a fee. |
 | **Cheaper than copying one by one** | Copying all 300 of Strike's copy picks with $10,000 since the record began would have meant 300 subscriptions ($6,000 in minimums) and **$9.37 in taker fees over 8,506 orders**. TUG's model account on the same $10,000 **earned $6.25** in rebates. |
 | **Strike's scores, read every 5 minutes** | 300 copy picks and 285 fade picks, on Strike and Hyperliquid, across all 33 Strike markets: 262 complete snapshots since 22 Oct. |
@@ -83,6 +83,8 @@ every hour   evidence ──► github.com/Jennycruzy/tug-evidence
 ```
 
 ## Check it yourself in 60 seconds
+
+With Node 22 and pnpm 10 (`nvm use` reads `.nvmrc`):
 
 ```
 git clone https://github.com/Jennycruzy/tug && cd tug

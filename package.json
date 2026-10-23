@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@10.18.3",
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "scripts": {
     "typecheck": "tsc -b packages/core packages/hl packages/strike apps/engine && tsc -p apps/web",

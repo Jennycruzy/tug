@@ -32,6 +32,19 @@ positions; fills; equity; depth samples; the testnet vault), the crowd lists, an
 traders appear under a salted pseudonym, the same everywhere, so every record still recomputes but no Strike
 account is listed.
 
+## Copied on Strike
+
+TUG's live account is a lead trader in Strike's own copy trading. The first copied trade, on 23 Oct 2026:
+
+| | Account | Strike fill id | Trade | Fee |
+|---|---|---|---|---|
+| TUG | `01a166…50aa` (tug-mainnet) | 4525254 | maker buy 0.18 CRCL-USD at 86.539, 12:17:18 UTC | −0.00078 (rebate) |
+| The copier | `01a167…856d` | 4525255 | buy 0.11 CRCL-USD at 86.524, 0.1 s later, `client_order_id` `copy:01a167e8-…:4525254` | 0.00476 |
+
+Strike sized the copy to the copier's $20 against TUG's equity, and its `client_order_id` names TUG's fill. Check it:
+`curl "https://api.strikefinance.org/v2/history/fill?account_id=01a16637-81cb-7682-b614-4728271550aa&limit=20"` and
+`curl "https://api.strikefinance.org/v2/copy/orders?account_id=01a167e0-4c48-7bec-9fdf-1818a5d9856d"`.
+
 ## What TUG promises, and where it is kept
 
 | Promise | Kept in | Test |
