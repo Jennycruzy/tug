@@ -11,16 +11,25 @@ export function App() {
   return (
     <LocationProvider>
       <header class="top">
-        <a class="brand" href="/">
-          TUG
-        </a>
-        <nav>
-          <a href="/">Ropes</a>
-          <a href="/record">Record</a>
-          <a href="/scoreboard">Scoreboard</a>
-          <a href="/api">API</a>
-          <a href="/status">Status</a>
-        </nav>
+        <div class="top-wrap">
+          <a class="brand" href="/" aria-label="TUG home">
+            <svg viewBox="0 0 32 32" aria-hidden="true">
+              <rect width="32" height="32" rx="8" fill="var(--ink)" />
+              <path d="M4 16h24" stroke="var(--hemp-a)" stroke-width="4" stroke-linecap="round" />
+              <circle cx="7" cy="16" r="3.5" fill="var(--fade)" />
+              <circle cx="25" cy="16" r="3.5" fill="var(--copy)" />
+              <path d="M19 11l5 5-5 5-5-5z" fill="var(--knot)" />
+            </svg>
+            <span>TUG</span>
+          </a>
+          <nav aria-label="Pages">
+            <a href="/#markets">Markets</a>
+            <a href="/record">Record</a>
+            <a href="/scoreboard">Scoreboard</a>
+            <a href="/api">API</a>
+            <a href="/status">Status</a>
+          </nav>
+        </div>
       </header>
       <main>
         <Router>
