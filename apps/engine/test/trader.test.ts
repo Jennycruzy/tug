@@ -262,3 +262,45 @@ describe("a refusal seen only on the user stream (mainnet)", () => {
     }
   });
 });
+
+// Real Strike mainnet replies (23 Oct, DRAM-USD): a post-only sell that filled within a second; REST answered 404.
+const F = JSON.parse(readFileSync(new URL("./fixtures/order-filled-at-once-mainnet-2026-10-23.json", import.meta.url), "utf8")) as {
+  replies: Record<string, { status: number; raw: string; body?: Record<string, string> }>;
+  stream: Array<{ raw: string }>;
+};
+
+describe("an order that fills at once (mainnet)", () => {
+  it("is confirmed as filled from the user stream and never retried", async () => {
+    const db = openDb(":memory:");
+    const ex = new Executor(db, new StrikeSigned(SECRET, "https://example.invalid"), "mainnet", { trading: true, killFile: "/nonexistent/kill", pollMs: 5 });
+    const body = F.replies.order_pending!.body!;
+    const real = globalThis.fetch;
+    const posts: unknown[] = [];
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      const method = init.method ?? "GET";
+      if (method === "POST") {
+        posts.push(init.body);
+        // Strike's OPEN and FILLED frames arrive within a second of the order, in this order.
+        F.stream.forEach((fr, k) => {
+          const f = parseUserFrame(JSON.parse(fr.raw));
+          setTimeout(() => {
+            if (f.kind === "order") ex.noteStreamOrder(f.order.c, f.order.X, String((f.order as { cr?: string }).cr ?? ""), f.order.i);
+          }, 2 + k);
+        });
+      }
+      const r = method === "POST" ? F.replies.order_pending! : F.replies.order_not_found!;
+      return new Response(r.raw, { status: r.status });
+    }) as typeof fetch;
+    let order;
+    try {
+      order = await ex.placePostOnly({ symbol: body.symbol!, side: body.side as "sell", price: body.price!, size: body.size!, clientOrderId: body.client_order_id!, reason: "check" });
+    } finally {
+      globalThis.fetch = real;
+    }
+    expect(F.stream.map((s) => JSON.parse(s.raw).data.X)).toEqual(["OPEN", "FILLED", "FILLED"]);
+    expect(order.Status).toBe("filled");
+    expect((db.prepare("SELECT status FROM orders").get() as { status: string }).status).toBe("filled");
+    expect((db.prepare("SELECT COUNT(*) AS n FROM events WHERE code='E-DROPPED'").get() as { n: number }).n).toBe(0);
+    expect(posts).toHaveLength(1);
+  });
+});

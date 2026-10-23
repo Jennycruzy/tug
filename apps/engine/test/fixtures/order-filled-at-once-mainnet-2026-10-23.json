@@ -1,0 +1,45 @@
+{
+ "server": "https://api.strikefinance.org",
+ "account": "TUG mainnet",
+ "note": "A post-only sell that rested and filled within a second: 201 pending, OPEN then FILLED on the user stream, and 404 over REST.",
+ "replies": {
+  "order_pending": {
+   "at": "2026-10-23T04:16:15.776Z",
+   "method": "POST",
+   "path": "/v2/order",
+   "body": {
+    "symbol": "DRAM-USD",
+    "side": "sell",
+    "type": "limit",
+    "price": "46.794",
+    "size": "0.31",
+    "time_in_force": "GTC",
+    "post_only": true,
+    "client_order_id": "tug-v1-mainnet-1792728975629-53-DRAM-USD-0"
+   },
+   "status": 201,
+   "raw": "{\"client_order_id\":\"tug-v1-mainnet-1792728975629-53-DRAM-USD-0\",\"account_id\":\"01a16637-81cb-7682-b614-4728271550aa\",\"symbol\":\"DRAM-USD\",\"status\":\"pending\",\"sequence_id\":1610305408,\"message_id\":\"1792728975725-0\"}"
+  },
+  "order_not_found": {
+   "at": "2026-10-23T04:16:18.902Z",
+   "method": "GET",
+   "path": "/v2/order?symbol=DRAM-USD&client_order_id=tug-v1-mainnet-1792728975629-53-DRAM-USD-0",
+   "status": 404,
+   "raw": "{\"error\":\"order not found\"}"
+  }
+ },
+ "stream": [
+  {
+   "at": "2026-10-23T04:16:15.832Z",
+   "raw": "{\"e\":\"ORDER_TRADE_UPDATE\",\"E\":1792728975776,\"data\":{\"s\":\"DRAM-USD\",\"c\":\"tug-v1-mainnet-1792728975629-53-DRAM-USD-0\",\"S\":\"SELL\",\"o\":\"LIMIT\",\"f\":\"GTC\",\"q\":\"0.31\",\"p\":\"46.794\",\"ap\":\"\",\"sp\":\"0\",\"x\":\"TRADE\",\"X\":\"OPEN\",\"i\":11524722341,\"cr\":\"\",\"l\":\"\",\"z\":\"0\",\"L\":\"\",\"N\":\"\",\"n\":\"\",\"ott\":1792728975725,\"t\":0,\"b\":\"\",\"a\":\"\",\"m\":false,\"R\":false,\"wt\":\"\",\"ot\":\"LIMIT\",\"ps\":\"\",\"cp\":false,\"rp\":\"\",\"act\":\"\",\"E\":1792728975776,\"T\":1792728975725}}"
+  },
+  {
+   "at": "2026-10-23T04:16:16.674Z",
+   "raw": "{\"e\":\"ORDER_TRADE_UPDATE\",\"E\":1792728976600,\"data\":{\"s\":\"DRAM-USD\",\"c\":\"tug-v1-mainnet-1792728975629-53-DRAM-USD-0\",\"S\":\"SELL\",\"o\":\"LIMIT\",\"f\":\"GTC\",\"q\":\"0.31\",\"p\":\"46.794\",\"ap\":\"\",\"sp\":\"0\",\"x\":\"TRADE\",\"X\":\"FILLED\",\"i\":11524722341,\"cr\":\"\",\"l\":\"0.31\",\"z\":\"0.31\",\"L\":\"46.794\",\"N\":\"USDT\",\"n\":\"-0.00072531\",\"ott\":1792728976550,\"t\":2251742,\"b\":\"\",\"a\":\"\",\"m\":true,\"R\":false,\"wt\":\"\",\"ot\":\"LIMIT\",\"ps\":\"BOTH\",\"cp\":false,\"rp\":\"0\",\"act\":\"\",\"E\":1792728976550,\"T\":1792728976550,\"account_id\":\"01a16637-81cb-7682-b614-4728271550aa\",\"fill_id\":\"4503406\",\"position_id\":\"230287\",\"position_seq\":1,\"position_context\":{\"known\":true,\"size\":\"0\",\"entry_price\":\"0\",\"margin_mode\":\"cross\",\"leverage\":5,\"funding\":\"0\",\"open_timestamp\":1792728976550},\"builder_fee\":\"0\",\"order_id\":\"11524722341\",\"trade_id\":\"2251742\"}}"
+  },
+  {
+   "at": "2026-10-23T04:16:16.679Z",
+   "raw": "{\"e\":\"ORDER_TRADE_UPDATE\",\"E\":1792728976624,\"data\":{\"s\":\"DRAM-USD\",\"c\":\"tug-v1-mainnet-1792728975629-53-DRAM-USD-0\",\"S\":\"SELL\",\"o\":\"LIMIT\",\"f\":\"GTC\",\"q\":\"0.31\",\"p\":\"46.794\",\"ap\":\"\",\"sp\":\"0\",\"x\":\"TRADE\",\"X\":\"FILLED\",\"i\":11524722341,\"cr\":\"\",\"l\":\"\",\"z\":\"0.31\",\"L\":\"\",\"N\":\"\",\"n\":\"\",\"ott\":1792728975725,\"t\":0,\"b\":\"\",\"a\":\"\",\"m\":false,\"R\":false,\"wt\":\"\",\"ot\":\"LIMIT\",\"ps\":\"\",\"cp\":false,\"rp\":\"\",\"act\":\"\",\"E\":1792728976624,\"T\":1792728975725}}"
+  }
+ ]
+}

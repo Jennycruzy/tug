@@ -100,11 +100,13 @@ export class Executor {
     const path = `/v2/order?symbol=${encodeURIComponent(o.symbol)}&client_order_id=${encodeURIComponent(o.clientOrderId)}`;
     for (let i = 0; i < 10; i++) {
       await sleep(this.opts.pollMs ?? 3_000);
+      // Any status Strike sent on the stream settles the order: a refusal, and also an order that filled at once
+      // (REST answers 404 for both on mainnet, OBSERVED 23 Oct) — retrying a filled order would double the position.
       const seen = this.streamed.get(o.clientOrderId);
-      if (seen && (seen.status === "rejected" || seen.status === "canceled" || seen.status === "expired")) {
+      if (seen && seen.status !== "pending" && seen.status !== "new") {
         this.setStatus(o.clientOrderId, seen.status, seen.id);
         logEvent(this.db, "executor", "info", `order ${seen.status}`, undefined, { clientOrderId: o.clientOrderId, orderId: seen.id, reason: seen.reason, via: "user stream" });
-        return OpenOrderSchema.parse({ ID: seen.id, ClientOrderID: o.clientOrderId, Symbol: o.symbol, Side: o.side, Status: seen.status, Size: o.size, Filled: "0", Price: o.price, PostOnly: true, CloseReason: seen.reason });
+        return OpenOrderSchema.parse({ ID: seen.id, ClientOrderID: o.clientOrderId, Symbol: o.symbol, Side: o.side, Status: seen.status, Size: o.size, Filled: seen.status === "filled" ? o.size : "0", Price: o.price, PostOnly: true, CloseReason: seen.reason });
       }
       const r = await this.client.call("GET", path);
       // Every read is stored, the 404s of an order that never appeared included.
