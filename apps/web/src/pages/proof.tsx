@@ -63,12 +63,14 @@ function Proof({ p }: { p: ProofReply }) {
           <b>{f.baseline.subscriptions} Strike copy subscriptions</b>
           <span>One by one</span>
           <b>
-            {usd(f.baseline.fees)} in taker fees, {f.baseline.orders.toLocaleString("en-US")} orders
+            ${f.baseline.fees.toFixed(2)} in taker fees, {f.baseline.orders.toLocaleString("en-US")} orders
           </b>
           <span>TUG</span>
-          <b>{f.tug.fees <= 0 ? `${usd(-f.tug.fees)} in maker rebates` : `${usd(f.tug.fees)} in fees`}</b>
+          <b>{f.tug.fees <= 0 ? `$${(-f.tug.fees).toFixed(2)} in maker rebates` : `$${f.tug.fees.toFixed(2)} in fees`}</b>
           <span>Difference</span>
-          <b>{usd(f.saved)} on {usd(f.capital)}</b>
+          <b>
+            ${f.saved.toFixed(2)} on ${f.capital.toLocaleString("en-US")}
+          </b>
         </div>
       ) : (
         <p class="note">Computed after the first snapshots.</p>
@@ -84,8 +86,8 @@ function Proof({ p }: { p: ProofReply }) {
         share of the size there is TUG's. Measured on the live account{d.since ? ` since ${time(d.since)} on ${day(d.since)}` : ""}.
       </p>
       <div class="card kv">
-        <span>Minutes resting</span>
-        <b>{d.minutes_resting.toLocaleString("en-US")}</b>
+        <span>Minutes waiting</span>
+        <b>{d.minutes_resting > 0 ? d.minutes_resting.toLocaleString("en-US") : "None right now: every target is filled, so no order is waiting"}</b>
         <span>Maker fills</span>
         <b>
           {d.maker_fills} of {d.fills}

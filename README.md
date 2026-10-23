@@ -11,7 +11,8 @@ money, and anyone can copy it on Strike in one tap.
 **[TUG on Strike](https://app.strikefinance.org/public-portfolio/@tug-mainnet)** ·
 **[Check it yourself](https://tug.38-49-216-59.sslip.io/check)** ·
 **[API](https://tug.38-49-216-59.sslip.io/api)** ·
-**[Evidence](https://github.com/Jennycruzy/tug-evidence)**
+**[Evidence](https://github.com/Jennycruzy/tug-evidence)** ·
+**[Judge it in 3 minutes](docs/judge.md)**
 
 ![TUG's home page: one rope per Strike market, the copy picks pulling one way, the fade picks the other, and TUG's side](docs/img/home.png)
 
