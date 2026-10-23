@@ -29,6 +29,7 @@ money, and anyone can copy it on Strike in one tap.
 | **The idea, measured before launch** | In the 7 days before TUG started, 71 of 93 of Strike's top copy picks gained and 74 of 100 of its fade picks lost, on Strike-listed markets ([script and data](https://github.com/Jennycruzy/tug-evidence/tree/main/pre-record)). |
 | **A Strike vault on testnet** | The same rules trading a [Strike vault](https://testnet.strikefinance.org/vaults/d7e255eb-509f-5cd7-8e15-ab95ef639c3f) with a second account's deposit and a withdrawal in progress. |
 | **TUG in your account, on mainnet** | Connect a wallet (Cardano, Ethereum or Solana) and TUG trades your own Strike account with the same rules, within a budget you set (up to $1,000 of real money), through Strike's builder codes. Testnet too, for trying it with test money. |
+| **4 bugs found and filed with Strike** | While building, we found four documentation and API bugs in Strike and filed each with evidence on Strike's own GitHub: a vault fee the docs and testnet disagree on, an order lookup that returns 404 for rejected orders, fills missing their client order id, and a missing vault endpoint in the docs ([issues #1–#4](https://github.com/strike-finance/strike-finance-skills/issues)). |
 | **Check every number yourself** | One command or one browser page downloads the evidence, checks every file's fingerprint, recomputes every record and matches each live fill against Strike's own records. |
 
 Figures as of 23 Oct 2026, 09:45 UTC. The live versions are on the [site](https://tug.38-49-216-59.sslip.io/record)
