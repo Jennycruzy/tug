@@ -197,7 +197,7 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
       crowds: lastCrowdQ.get(ctx.network) ?? null,
       trading: {
         mainnet: TRADING ? "on" : "off",
-        kill_switch: { mainnet: existsSync(killFileFor("mainnet")) ? "on" : "off", testnet: existsSync(killFileFor("testnet")) ? "on" : "off" },
+        kill_switch: { mainnet: existsSync(killFileFor("mainnet")) ? "on" : "off", testnet: existsSync(killFileFor("testnet")) ? "on" : "off", vault: existsSync(killFileFor("vault")) ? "on" : "off" },
       },
       orders: { open: Object.fromEntries((openCountQ.all() as Array<{ network: string; n: number }>).map((r) => [r.network, r.n])), recent: ordersQ.all() },
       errors_24h: {
@@ -321,25 +321,91 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
     };
   };
 
+  const vaultIdQ = db.prepare("SELECT vault_id FROM vault_points ORDER BY ts DESC LIMIT 1");
+  const vaultPointsQ = db.prepare("SELECT ts, share_price, equity, total_shares, raw FROM vault_points WHERE vault_id=? ORDER BY ts");
+  const vaultMovesQ = db.prepare("SELECT id, type, account_id, status, ts, usd, shares, share_price, execute_at, executed_at FROM vault_moves WHERE vault_id=? ORDER BY ts DESC");
+  const TESTNET_API = "https://api-v2-testnet.strikefinance.org";
+
+  /**
+   * The testnet vault's record (labelled TESTNET), from stored rows only: Strike's share price each minute (one
+   * point per 5 minutes served), every deposit and withdrawal with Strike's status, the vault's own fills and
+   * positions, and links to Strike's public vault records.
+   */
+  const vaultRecord = () => {
+    const row = vaultIdQ.get() as { vault_id: string } | undefined;
+    if (!row) return null;
+    const id = row.vault_id;
+    const points = vaultPointsQ.all(id) as Array<{ ts: number; share_price: number; equity: number; total_shares: number; raw: string }>;
+    const first = points[0]!;
+    const last = points[points.length - 1]!;
+    const v = JSON.parse(last.raw) as { name?: string; status?: string; lockup_days?: number; leader_commission_bps?: number; leader_account_id?: string };
+    const f = fillSumQ.get("vault") as { n: number; maker: number | null; fees: number; realized: number; traded: number };
+    const step = 5 * 60_000;
+    const thinned = points.filter((p, i) => i === 0 || i === points.length - 1 || Math.floor(p.ts / step) !== Math.floor(points[i - 1]!.ts / step));
+    const moves = vaultMovesQ.all(id) as Array<{ id: string; type: string; account_id: string | null; status: string; ts: number; usd: number | null; shares: number | null; share_price: number | null; execute_at: number | null; executed_at: number | null }>;
+    return {
+      label: "TESTNET" as const,
+      vault_id: id,
+      name: v.name ?? "TUG",
+      status: v.status ?? "unknown",
+      lockup_days: v.lockup_days ?? null,
+      leader_fee_bps: v.leader_commission_bps ?? null,
+      start: first.ts,
+      at: last.ts,
+      share_price: last.share_price,
+      start_share_price: first.share_price,
+      equity: last.equity,
+      total_shares: last.total_shares,
+      fills: f.n,
+      maker_fills: f.maker ?? 0,
+      traded: f.traded,
+      fees: f.fees,
+      realized: f.realized,
+      positions: Object.entries(livePositions("vault")).map(([symbol, p]) => ({ symbol, size: Number(p.size), entry: p.entry, upnl: p.upnl })),
+      moves: moves.map((m) => ({
+        id: m.id,
+        type: m.type as "deposit" | "withdrawal",
+        who: (m.account_id && m.account_id === v.leader_account_id ? "leader" : "depositor") as "leader" | "depositor",
+        account: m.account_id ? short(m.account_id) : null,
+        status: m.status,
+        at: m.ts,
+        usd: m.usd,
+        shares: m.shares,
+        share_price: m.share_price,
+        execute_at: m.execute_at,
+        executed_at: m.executed_at,
+      })),
+      links: {
+        strike_vault_page: `https://testnet.strikefinance.org/vaults/${id}`,
+        strike_vault: `${TESTNET_API}/v2/vault/${id}`,
+        strike_history: `${TESTNET_API}/v2/vault/${id}/history`,
+        strike_fills: `${TESTNET_API}/v2/history/fill?vault_id=${id}`,
+        strike_positions: `${TESTNET_API}/v2/positions?vault_id=${id}`,
+      },
+      curve: thinned.map((p) => ({ at: p.ts, share_price: p.share_price, equity: p.equity })),
+    };
+  };
+
   app.get<{ Querystring: { network?: string } }>("/api/v1/record", async (req, reply) => {
     const network = req.query.network ?? "mainnet";
     if (network !== "mainnet" && network !== "testnet") return reply.code(400).send({ code: "E-NETWORK", message: "network is mainnet or testnet." });
     const curve = (paperAllQ.all() as Array<{ ts: number; equity: number }>).map((p) => ({ at: p.ts, equity: p.equity }));
     return {
       network,
-      // The live account: real money on mainnet, test money on testnet (labelled TESTNET). The vault comes later.
+      // The live account: real money on mainnet, test money on testnet (labelled TESTNET); the vault is testnet only.
       live: liveRecord(network),
-      vault: null,
+      vault: vaultRecord(),
       paper: network === "mainnet" && paperSummary() ? { ...paperSummary()!, curve } : null,
     };
   });
 
   app.get<{ Querystring: { network?: string } }>("/api/v1/record/fills", async (req, reply) => {
     const network = req.query.network ?? "mainnet";
-    if (network !== "mainnet" && network !== "testnet") return reply.code(400).send({ code: "E-NETWORK", message: "network is mainnet or testnet." });
+    if (network !== "mainnet" && network !== "testnet" && network !== "vault") return reply.code(400).send({ code: "E-NETWORK", message: "network is mainnet, testnet or vault." });
     const fills = fillsQ.all(network) as Array<{ ts: number; symbol: string; side: string; role: string | null; price: number; size: number; fee: number; realized_pnl: number; order_id: number | null; client_order_id: string | null }>;
     // Negative fee = maker rebate. Strike's fill history can omit the client order id; Strike's order id is always kept.
-    return { network, strike_fills: network === "mainnet" ? (strikeLinks()?.strike_fills ?? null) : null, fills: fills.map((x) => ({ at: x.ts, symbol: x.symbol, side: x.side, role: x.role, price: x.price, size: x.size, fee: x.fee, realized: x.realized_pnl, order_id: x.order_id, client_order_id: x.client_order_id })) };
+    const vaultFills = network === "vault" ? (vaultRecord()?.links.strike_fills ?? null) : null;
+    return { network, strike_fills: network === "mainnet" ? (strikeLinks()?.strike_fills ?? null) : vaultFills, fills: fills.map((x) => ({ at: x.ts, symbol: x.symbol, side: x.side, role: x.role, price: x.price, size: x.size, fee: x.fee, realized: x.realized_pnl, order_id: x.order_id, client_order_id: x.client_order_id })) };
   });
 
   app.get("/api/v1/paper", async () => {

@@ -154,8 +154,44 @@ export interface Fill {
   client_order_id: string | null;
 }
 
+export interface VaultRecord {
+  label: "TESTNET";
+  vault_id: string;
+  name: string;
+  status: string;
+  lockup_days: number | null;
+  leader_fee_bps: number | null;
+  start: number;
+  at: number;
+  share_price: number;
+  start_share_price: number;
+  equity: number;
+  total_shares: number;
+  fills: number;
+  maker_fills: number;
+  traded: number;
+  fees: number;
+  realized: number;
+  positions: Array<{ symbol: string; size: number; entry: number; upnl: number }>;
+  moves: Array<{
+    id: string;
+    type: "deposit" | "withdrawal";
+    who: "leader" | "depositor";
+    account: string | null;
+    status: string;
+    at: number;
+    usd: number | null;
+    shares: number | null;
+    share_price: number | null;
+    execute_at: number | null;
+    executed_at: number | null;
+  }>;
+  links: { strike_vault_page: string; strike_vault: string; strike_history: string; strike_fills: string; strike_positions: string };
+  curve: Array<{ at: number; share_price: number; equity: number }>;
+}
+
 export interface FillsReply {
-  network: "mainnet" | "testnet";
+  network: "mainnet" | "testnet" | "vault";
   strike_fills: string | null;
   fills: Fill[];
 }
@@ -163,7 +199,7 @@ export interface FillsReply {
 export interface RecordReply {
   network: "mainnet" | "testnet";
   live: LiveRecord | null;
-  vault: null;
+  vault: VaultRecord | null;
   paper: (PaperSummary & { curve: Array<{ at: number; equity: number }> }) | null;
 }
 

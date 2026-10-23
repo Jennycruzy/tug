@@ -14,6 +14,7 @@ describe("/admin/pause port", () => {
   it("mainnet defaults to 8793 (8791 is another service's on the server); testnet to 8792", () => {
     expect(adminPortFor("mainnet")).toBe(8793);
     expect(adminPortFor("testnet")).toBe(8792);
+    expect(adminPortFor("vault")).toBe(8794);
   });
 
   it("listenAdmin rejects when the port is taken, and answers POST /admin/pause when it is free", async () => {

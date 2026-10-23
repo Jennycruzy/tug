@@ -16,15 +16,18 @@ assertPublished(loaded, JSON.parse(readFileSync(join(ROOT, "evidence/rules-finge
 const keyFile = process.env.TUG_ACCOUNT_KEY_FILE;
 if (!keyFile) throw new Error("TUG_ACCOUNT_KEY_FILE is not set: this network has no trading account yet.");
 const db = openDb(DB_FILE);
-const ex = new Executor(db, StrikeSigned.fromFile(keyFile), NETWORK, { trading: TRADING, killFile: KILL_FILE });
+// `tug-trader@vault` runs the testnet vault: the leader's key, its rows under the network name "vault".
+const vaultId = process.env.TUG_TRADE_VAULT === "on" ? process.env.TUG_VAULT_ID : undefined;
+if (process.env.TUG_TRADE_VAULT === "on" && !vaultId) throw new Error("TUG_TRADE_VAULT is on but TUG_VAULT_ID is not set.");
+const ex = new Executor(db, StrikeSigned.fromFile(keyFile), NETWORK, { trading: TRADING, killFile: KILL_FILE, vaultId });
 const trader = new Trader(db, ex, loaded.rules, {
   network: NETWORK,
-  markets: NETWORK === "testnet" ? loaded.rules.testnet_markets : "all",
+  markets: NETWORK === "mainnet" ? "all" : loaded.rules.testnet_markets,
   tradingOn: () => TRADING && !existsSync(KILL_FILE),
   pausedFile: join(STATE_DIR, `PAUSED-${NETWORK}`),
   startEquity: process.env.TUG_START_EQUITY ? Number(process.env.TUG_START_EQUITY) : undefined,
   keyFile,
-  vaultId: process.env.TUG_TRADE_VAULT === "on" ? process.env.TUG_VAULT_ID : undefined,
+  vaultId,
 });
 
 // POST /admin/pause (loopback only, §9.7): turns the kill switch on and cancels every TUG order at once.

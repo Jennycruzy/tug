@@ -111,13 +111,50 @@ const schemas: Record<string, Schema> = {
     order_id: nullable(int),
     client_order_id: nullable(str),
   }),
+  RecordVault: obj({
+    label: { type: "string", enum: ["TESTNET"] },
+    vault_id: str,
+    name: str,
+    status: str,
+    lockup_days: nullable(int),
+    leader_fee_bps: nullable(int),
+    start: int,
+    at: int,
+    share_price: num,
+    start_share_price: num,
+    equity: num,
+    total_shares: num,
+    fills: int,
+    maker_fills: int,
+    traded: num,
+    fees: num,
+    realized: num,
+    positions: arr(obj({ symbol: str, size: num, entry: num, upnl: num })),
+    moves: arr(
+      obj({
+        id: str,
+        type: { type: "string", enum: ["deposit", "withdrawal"] },
+        who: { type: "string", enum: ["leader", "depositor"] },
+        account: nullable(str),
+        status: str,
+        at: int,
+        usd: nullable(num),
+        shares: nullable(num),
+        share_price: nullable(num),
+        execute_at: nullable(int),
+        executed_at: nullable(int),
+      }),
+    ),
+    links: obj({ strike_vault_page: str, strike_vault: str, strike_history: str, strike_fills: str, strike_positions: str }),
+    curve: arr(obj({ at: int, share_price: num, equity: num })),
+  }),
   Record: obj({
     network: { type: "string", enum: ["mainnet", "testnet"] },
     live: nullOr(ref("RecordLive")),
-    vault: { type: "null" },
+    vault: nullOr(ref("RecordVault")),
     paper: nullOr(ref("RecordPaper")),
   }),
-  Fills: obj({ network: { type: "string", enum: ["mainnet", "testnet"] }, strike_fills: nullable(str), fills: arr(ref("Fill")) }),
+  Fills: obj({ network: { type: "string", enum: ["mainnet", "testnet", "vault"] }, strike_fills: nullable(str), fills: arr(ref("Fill")) }),
   Paper: {
     type: "object",
     additionalProperties: false,
@@ -174,7 +211,7 @@ const schemas: Record<string, Schema> = {
     crowds: nullOr(obj({ id: int, pulled_at: int, copy_count: int, fade_count: int })),
     trading: obj({
       mainnet: { type: "string", enum: ["on", "off"] },
-      kill_switch: obj({ mainnet: { type: "string", enum: ["on", "off"] }, testnet: { type: "string", enum: ["on", "off"] } }),
+      kill_switch: obj({ mainnet: { type: "string", enum: ["on", "off"] }, testnet: { type: "string", enum: ["on", "off"] }, vault: { type: "string", enum: ["on", "off"] } }),
     }),
     orders: obj({
       open: { type: "object", additionalProperties: int },
@@ -228,7 +265,7 @@ export const OPENAPI = {
     },
     "/api/v1/crowds": { get: { summary: "The current crowd lists from Strike's own scores", responses: { "200": ok("Crowds", "Current crowd version"), "503": err("No crowd list yet") } } },
     "/api/v1/record": { get: { summary: "Records: live account, vault and the paper record (MODEL)", parameters: [networkParam], responses: { "200": ok("Record", "Records"), "400": err("Unknown network") } } },
-    "/api/v1/record/fills": { get: { summary: "Fills with Strike order ids", parameters: [networkParam], responses: { "200": ok("Fills", "Fills"), "400": err("Unknown network") } } },
+    "/api/v1/record/fills": { get: { summary: "Fills with Strike order ids (network=vault: the testnet vault's fills)", parameters: [{ ...networkParam, schema: { type: "string", enum: ["mainnet", "testnet", "vault"], default: "mainnet" } }], responses: { "200": ok("Fills", "Fills"), "400": err("Unknown network") } } },
     "/api/v1/paper": { get: { summary: "The paper record (MODEL): equity, turnover, fees, funding, targets", responses: { "200": ok("Paper", "Paper record") } } },
     "/api/v1/scoreboard": { get: { summary: "How Strike's copy picks and fade picks have done since the record started", responses: { "200": ok("Scoreboard", "Scoreboard") } } },
     "/api/v1/proof": { get: { summary: "Rules fingerprint, mapping, fees saved, evidence links", responses: { "200": ok("Proof", "Proof") } } },
@@ -257,6 +294,8 @@ OpenAPI 3.1: https://tug.38-49-216-59.sslip.io/api/openapi.json
   whose "result" is equity minus money put in so far, and links to Strike's public records of the account. "paper" is labelled MODEL: a calculation from real
   Strike prices, not trades.
 - GET /api/v1/record/fills: the live account's fills, newest first, with Strike order ids (fee negative = rebate).
+  ?network=vault: the testnet vault's fills. GET /api/v1/record also carries "vault" (TESTNET): share price each
+  minute, every deposit and withdrawal with its status, and links to Strike's public vault records.
 - GET /api/v1/paper: the paper record (MODEL) with the targets of the last rebalance.
 - GET /api/v1/scoreboard: how Strike's copy picks and fade picks did since the record started, per market.
 - GET /api/v1/proof: the rules fingerprint (SHA-256, published before the record started), the market

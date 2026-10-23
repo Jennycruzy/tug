@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { accountStatusFrom, computeTargets, marketRulesFrom, planOrders, riskCheck, toStep, type Holding, type MarketRules, type RiskAction, type Rules } from "@tug/core";
-import { bookTickers, markets as strikeMarkets, UserStream, type StrikeMarket } from "@tug/strike";
+import { bookTickers, markets as strikeMarkets, UserStream, vault as strikeVault, vaultHistory, type StrikeMarket } from "@tug/strike";
 import { logEvent, type Db } from "./db.js";
 import type { Executor } from "./executor.js";
 
@@ -61,7 +61,7 @@ export class Trader {
           this.ex.noteStreamOrder(o.c, o.X, String(o.cr ?? ""), o.i);
         }
       },
-      resync: () => void this.syncFills().then(() => this.syncTransfers()),
+      resync: () => void this.syncFills().then(() => this.syncMoney()),
       status: (s) => logEvent(this.db, "userstream", s.state === "closed" ? "warn" : "info", `user stream ${s.state}`, s.state === "closed" ? "E-WS" : undefined, s),
     }, { vaultId: this.cfg.vaultId });
     this.stream.start();
@@ -69,11 +69,11 @@ export class Trader {
     every(MARKS_EVERY_MS, () => this.readMarkets());
     every(RISK_EVERY_MS, () => this.riskTick());
     every(TRADE_EVERY_MS, () => this.tradeTick());
-    every(60_000, () => this.syncFills().then(() => this.syncTransfers()));
+    every(60_000, () => this.syncFills().then(() => this.syncMoney()));
     void this.readMarkets()
       .then(() => this.leverageForHeld())
       .then(() => this.riskTick())
-      .then(() => this.syncTransfers())
+      .then(() => this.syncMoney())
       .catch((e) => this.fail(e));
   }
 
@@ -111,6 +111,13 @@ export class Trader {
   }
 
   private startEquity(equity: number): number {
+    // A vault's equity moves with every deposit and withdrawal, so its stop is on the share price: the start
+    // equity is the first recorded share price times today's shares.
+    if (this.cfg.vaultId) {
+      const first = this.db.prepare("SELECT share_price FROM vault_points WHERE vault_id=? ORDER BY ts LIMIT 1").get(this.cfg.vaultId) as { share_price: number } | undefined;
+      const last = this.db.prepare("SELECT total_shares FROM vault_points WHERE vault_id=? ORDER BY ts DESC LIMIT 1").get(this.cfg.vaultId) as { total_shares: number } | undefined;
+      return first && last ? first.share_price * last.total_shares : equity;
+    }
     if (this.cfg.startEquity) return this.cfg.startEquity;
     const first = this.db.prepare("SELECT equity FROM live_equity WHERE network=? ORDER BY ts LIMIT 1").get(this.cfg.network) as { equity: number } | undefined;
     return first?.equity ?? equity;
@@ -302,6 +309,30 @@ export class Trader {
       const price = (o.side === "buy" ? Number(o.price) - tick : Number(o.price) + tick).toFixed(d);
       logEvent(this.db, "trader", "info", "re-quote one tick away", undefined, { symbol: o.symbol, from: o.price, to: price });
       await this.placeWithRequote({ ...o, price }, 1);
+    }
+  }
+
+  /** Money in and out: the vault's deposits, withdrawals and share price, or the account's own transfers. */
+  syncMoney(): Promise<void> {
+    return this.cfg.vaultId ? this.syncVault() : this.syncTransfers();
+  }
+
+  /**
+   * The vault's share price, equity and shares each minute (`vault_points`) and every deposit and withdrawal
+   * (`vault_moves`), from Strike's public vault reads. A withdrawal's status follows Strike's: pending, then
+   * completed (after the lockup) or cancelled.
+   */
+  async syncVault(): Promise<void> {
+    const id = this.cfg.vaultId!;
+    const { vault: v, raw } = await strikeVault(id);
+    this.db.prepare("INSERT OR IGNORE INTO vault_points (vault_id, ts, share_price, equity, total_shares, raw) VALUES (?,?,?,?,?,?)").run(id, Date.now(), v.share_price, v.equity, v.total_shares, raw);
+    const ins = this.db.prepare(
+      "INSERT INTO vault_moves (vault_id, id, type, account_id, status, ts, usd, shares, share_price, execute_at, executed_at, raw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (vault_id, id) DO UPDATE SET status=excluded.status, usd=excluded.usd, share_price=excluded.share_price, executed_at=excluded.executed_at, raw=excluded.raw",
+    );
+    for (const m of await vaultHistory(id)) {
+      const usd = m.type === "deposit" ? m.usd_amount : (m.actual_usd ?? m.estimated_usd);
+      const shares = m.type === "deposit" ? m.shares_minted : m.shares_burned;
+      ins.run(id, m.id, m.type, m.account_id ?? null, m.status, m.timestamp, usd ?? null, shares ?? null, m.share_price ?? null, m.execute_at_timestamp ?? null, m.executed_timestamp ?? null, JSON.stringify(m));
     }
   }
 

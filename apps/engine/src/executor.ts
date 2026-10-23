@@ -33,14 +33,27 @@ export class Executor {
     private readonly db: Db,
     private readonly client: StrikeSigned,
     readonly network: string,
-    private readonly opts: { trading: boolean; killFile: string; pollMs?: number },
+    private readonly opts: { trading: boolean; killFile: string; pollMs?: number; vaultId?: string },
   ) {}
+
+  /**
+   * Trading a Strike vault (testnet): the leader's same key, with `vault_id` in the body of every write and as a
+   * query parameter on every read (Strike's vault-leader docs; reads checked on testnet 23 Oct).
+   */
+  private vaultPath(path: string): string {
+    if (!this.opts.vaultId) return path;
+    return `${path}${path.includes("?") ? "&" : "?"}vault_id=${encodeURIComponent(this.opts.vaultId)}`;
+  }
 
   isKilled(): boolean {
     return existsSync(this.opts.killFile);
   }
 
   private async call(method: "GET" | "POST" | "DELETE", path: string, body?: unknown): Promise<SignedReply> {
+    if (this.opts.vaultId) {
+      if (method === "GET") path = this.vaultPath(path);
+      else body = { ...(body as Record<string, unknown> | undefined), vault_id: this.opts.vaultId };
+    }
     const r = await this.client.call(method, path, body);
     this.db
       .prepare("INSERT INTO strike_calls (network, ts, method, path, body, status, reply) VALUES (?,?,?,?,?,?,?)")
@@ -97,7 +110,7 @@ export class Executor {
       logEvent(this.db, "executor", "error", (e as Error).message, (e as TugError).code ?? "E-STRIKE", { order: o });
       throw e;
     }
-    const path = `/v2/order?symbol=${encodeURIComponent(o.symbol)}&client_order_id=${encodeURIComponent(o.clientOrderId)}`;
+    const path = this.vaultPath(`/v2/order?symbol=${encodeURIComponent(o.symbol)}&client_order_id=${encodeURIComponent(o.clientOrderId)}`);
     for (let i = 0; i < 10; i++) {
       await sleep(this.opts.pollMs ?? 3_000);
       // Any status Strike sent on the stream settles the order: a refusal, and also an order that filled at once
@@ -180,7 +193,7 @@ export class Executor {
     this.setStatus(clientOrderId, "pending");
     logEvent(this.db, "executor", "warn", `risk exit ${symbol}: ${reason}`, code, { symbol, side, size: size ?? held.size });
     // Strike answers 201 to every well-formed order and decides later: read the exit back to its final status.
-    const path = `/v2/order?symbol=${encodeURIComponent(symbol)}&client_order_id=${encodeURIComponent(clientOrderId)}`;
+    const path = this.vaultPath(`/v2/order?symbol=${encodeURIComponent(symbol)}&client_order_id=${encodeURIComponent(clientOrderId)}`);
     for (let i = 0; i < 10; i++) {
       await sleep(this.opts.pollMs ?? 3_000);
       const back = await this.client.call("GET", path);

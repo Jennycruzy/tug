@@ -163,6 +163,30 @@ CREATE TABLE IF NOT EXISTS transfers (
   raw TEXT NOT NULL,
   PRIMARY KEY (network, id)
 );
+CREATE TABLE IF NOT EXISTS vault_points (
+  vault_id TEXT NOT NULL,
+  ts INTEGER NOT NULL,
+  share_price REAL NOT NULL,
+  equity REAL NOT NULL,
+  total_shares REAL NOT NULL,
+  raw TEXT NOT NULL,
+  PRIMARY KEY (vault_id, ts)
+);
+CREATE TABLE IF NOT EXISTS vault_moves (
+  vault_id TEXT NOT NULL,
+  id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  account_id TEXT,
+  status TEXT NOT NULL,
+  ts INTEGER NOT NULL,
+  usd REAL,
+  shares REAL,
+  share_price REAL,
+  execute_at INTEGER,
+  executed_at INTEGER,
+  raw TEXT NOT NULL,
+  PRIMARY KEY (vault_id, id)
+);
 CREATE TABLE IF NOT EXISTS strike_calls (
   id INTEGER PRIMARY KEY,
   network TEXT NOT NULL,

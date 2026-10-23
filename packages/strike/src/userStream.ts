@@ -94,13 +94,14 @@ export class UserStream {
         } catch {
           continue;
         }
-        // The logon reply: subscribe to the account (and the vault on testnet), then resync from REST.
+        // The logon reply: subscribe to the account, or to the vault only when this stream runs a vault (its
+        // leader's own account has its own trader and stream), then resync from REST.
         if (json.id === 1 && json.status === 200) {
           loggedOn = true;
           clearTimeout(logonTimer);
           const accountId = String((json.result as { account_id?: string } | undefined)?.account_id ?? "");
-          ws.send(JSON.stringify({ method: "subscribe", channel: "userstream", id: 2 }));
           if (this.opts.vaultId) ws.send(JSON.stringify({ method: "subscribe", channel: "userstream", vault_id: this.opts.vaultId, id: 3 }));
+          else ws.send(JSON.stringify({ method: "subscribe", channel: "userstream", id: 2 }));
           this.backoff = 1_000;
           this.on.status?.({ state: "open" });
           this.on.resync?.(accountId);

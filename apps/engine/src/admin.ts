@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 
 /** Loopback port of POST /admin/pause per network. 8791 is taken by another service on the server (decisions.md). */
-export const adminPortFor = (network: string): number => (network === "mainnet" ? 8793 : 8792);
+export const adminPortFor = (network: string): number => (network === "mainnet" ? 8793 : network === "vault" ? 8794 : 8792);
 
 /**
  * Opens POST /admin/pause on 127.0.0.1 (§9.7) and resolves once it is listening; rejects if the port cannot

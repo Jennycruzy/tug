@@ -102,6 +102,51 @@ export async function bookTickers(): Promise<Record<string, { bid: number; ask: 
   return Object.fromEntries(rows.map((r) => [r.symbol, { bid: r.bidPrice, ask: r.askPrice }]));
 }
 
+const VaultSchema = z
+  .object({ vault_id: z.string(), name: z.string(), status: z.string(), share_price: num, equity: num, total_shares: num })
+  .passthrough();
+export type StrikeVault = z.infer<typeof VaultSchema>;
+
+/** One vault as Strike publishes it (no auth): share price, equity, total shares (Strike's vault skill). */
+export async function vault(vaultId: string): Promise<{ vault: StrikeVault; raw: string }> {
+  const { json, raw } = await fetchJson(`${STRIKE_API_URL}/v2/vault/${encodeURIComponent(vaultId)}`, { weight: READ_WEIGHT, bucket: strikeBucket });
+  return { vault: VaultSchema.parse(json), raw };
+}
+
+const VaultMoveSchema = z
+  .object({
+    id: z.string(),
+    type: z.string(),
+    account_id: z.string().optional(),
+    status: z.string(),
+    timestamp: z.number(),
+    usd_amount: num.optional(),
+    actual_usd: num.optional(),
+    estimated_usd: num.optional(),
+    shares_minted: num.optional(),
+    shares_burned: num.optional(),
+    share_price: num.optional(),
+    execute_at_timestamp: z.number().optional(),
+    executed_timestamp: z.number().optional(),
+  })
+  .passthrough();
+export type StrikeVaultMove = z.infer<typeof VaultMoveSchema>;
+
+/** Every deposit and withdrawal in a vault, newest first (no auth; follows next_cursor to the end). */
+export async function vaultHistory(vaultId: string): Promise<StrikeVaultMove[]> {
+  const out: StrikeVaultMove[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 20; page++) {
+    const url = `${STRIKE_API_URL}/v2/vault/${encodeURIComponent(vaultId)}/history?limit=500${cursor ? `&pagination=${encodeURIComponent(cursor)}` : ""}`;
+    const { json } = await fetchJson(url, { weight: READ_WEIGHT, bucket: strikeBucket });
+    const r = z.object({ history: z.array(VaultMoveSchema).nullable().optional(), next_cursor: z.string().nullable().optional() }).parse(json);
+    out.push(...(r.history ?? []));
+    cursor = r.next_cursor ?? null;
+    if (!cursor || (r.history ?? []).length === 0) break;
+  }
+  return out;
+}
+
 export * from "./signed.js";
 export * from "./userFrames.js";
 export * from "./userStream.js";
