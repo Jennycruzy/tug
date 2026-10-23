@@ -41,8 +41,9 @@ const timer = setInterval(() => void tick(), 10_000);
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => {
     clearInterval(timer);
-    runner.stopAll();
-    db.close();
-    process.exit(0);
+    void runner.stopAll().finally(() => {
+      db.close();
+      process.exit(0);
+    });
   });
 }

@@ -73,7 +73,10 @@ export class Connect {
   constructor(
     private readonly db: Db,
     private readonly o: { kek: Buffer; code: string; feeBps: number; strikeUrl: string },
-  ) {}
+  ) {
+    // A deleted key's ciphertext is overwritten in the database file, not just unlinked.
+    this.db.pragma("secure_delete = ON");
+  }
 
   private async strike(path: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
     const r = await fetch(this.o.strikeUrl + path, { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000) });

@@ -7,6 +7,21 @@ import { logEvent, type Db } from "./db.js";
 import { Executor } from "./executor.js";
 import { Trader } from "./trader.js";
 
+export const STRIKE_API_KEYS_PAGE = "https://testnet.strikefinance.org/api-keys";
+export const STRIKE_KEY_NOTE = "TUG deleted its copy of the trading key. The key stays listed on your Strike account until you remove it on Strike's API keys page.";
+
+interface StopReport {
+  at: number;
+  tries: number;
+  cancelled: string[];
+  closed: string[];
+  open_orders_after: number;
+  positions_after: string[];
+  key: "kept" | "deleted";
+  strike_key_note: string;
+  strike_api_keys_page: string;
+}
+
 /**
  * Runs every connected account (`tug-trader@connect`, Strike testnet only): one Trader per active connection, on
  * the rules' testnet markets, sized on the budget cap and never past it, with the builder fee on every order.
@@ -15,12 +30,16 @@ import { Trader } from "./trader.js";
  */
 export class ConnectRunner {
   private readonly running = new Map<string, { trader: Trader; ex: Executor }>();
+  private readonly stopTries = new Map<string, number>();
 
   constructor(
     private readonly db: Db,
     private readonly rules: Rules,
     private readonly o: { kek: Buffer; strikeUrl: string; feeBps: number; stateDir: string; killFile: string; pollMs?: number },
-  ) {}
+  ) {
+    // A deleted key's ciphertext is overwritten in the database file, not just unlinked.
+    this.db.pragma("secure_delete = ON");
+  }
 
   private build(row: ConnectRow): { trader: Trader; ex: Executor } {
     const hex = decryptKey(this.o.kek, row.enc_privkey!);
@@ -38,8 +57,9 @@ export class ConnectRunner {
     return { trader, ex };
   }
 
-  /** One pass: start new active connections, wind down stopping ones. */
+  /** One pass: expire unsigned connections, start new active ones, wind down stopping ones. */
   async tick(): Promise<void> {
+    this.expireSigning();
     const rows = this.db.prepare("SELECT * FROM connections WHERE status IN ('active','stopping') AND network='testnet'").all() as ConnectRow[];
     for (const row of rows) {
       try {
@@ -64,12 +84,22 @@ export class ConnectRunner {
     }
   }
 
-  /** Stop: cancel TUG's orders, close positions if asked, delete the key, and record what was done. */
+  /**
+   * Stop: wait for any running tick, cancel TUG's orders, close positions if asked, then read back. The key is
+   * deleted only when no TUG order is left open (and no position, if closing was asked); otherwise the connection
+   * stays "stopping" and the next pass tries again, with E-STOP-OPEN logged from the third try. TUG deletes its own
+   * copy of the key; Strike has no call for TUG to remove the key from the person's account (their API keys page does).
+   */
   async wind(row: ConnectRow): Promise<void> {
-    const r = this.running.get(row.id) ?? (row.enc_privkey ? this.build(row) : undefined);
-    this.running.get(row.id)?.trader.stop();
-    this.running.delete(row.id);
-    const report: { at: number; cancelled: string[]; closed: string[]; open_orders_after: number; positions_after: string[] } = { at: Date.now(), cancelled: [], closed: [], open_orders_after: 0, positions_after: [] };
+    const running = this.running.get(row.id);
+    if (running) {
+      await running.trader.stop();
+      this.running.delete(row.id);
+    }
+    const r = running ?? (row.enc_privkey ? this.build(row) : undefined);
+    const tries = (this.stopTries.get(row.id) ?? 0) + 1;
+    this.stopTries.set(row.id, tries);
+    const report: StopReport = { at: Date.now(), tries, cancelled: [], closed: [], open_orders_after: 0, positions_after: [], key: "kept", strike_key_note: STRIKE_KEY_NOTE, strike_api_keys_page: STRIKE_API_KEYS_PAGE };
     if (r) {
       const prefix = `tug-v${this.rules.version}-${connectionNetwork(row.id)}-`;
       for (const s of this.rules.testnet_markets) {
@@ -85,15 +115,31 @@ export class ConnectRunner {
         }
       }
       for (const s of this.rules.testnet_markets) report.open_orders_after += (await r.ex.openOrders(s)).filter((x) => x.ClientOrderID.startsWith(prefix)).length;
-      report.positions_after = Object.keys(await r.ex.positions());
+      report.positions_after = Object.keys(await r.ex.positions()).filter((x) => this.rules.testnet_markets.includes(x));
     }
     const now = Date.now();
+    const clear = report.open_orders_after === 0 && (!row.close_on_stop || report.positions_after.length === 0);
+    if (r && !clear) {
+      // Something is still open: keep the key so TUG can still cancel or close it, and try again next pass.
+      this.db.prepare("UPDATE connections SET stop_report=?, updated_at=? WHERE id=?").run(JSON.stringify(report), now, row.id);
+      if (tries >= 3) logEvent(this.db, "connect", "error", "Stop could not clear TUG's orders or positions yet; trying again", "E-STOP-OPEN", { id: row.id, ...report });
+      return;
+    }
+    report.key = "deleted";
+    this.stopTries.delete(row.id);
     this.db.prepare("UPDATE connections SET status='ended', enc_privkey=NULL, stop_report=?, ended_at=?, updated_at=? WHERE id=?").run(JSON.stringify(report), now, now, row.id);
-    logEvent(this.db, "connect", "info", "connection ended: key deleted", undefined, { id: row.id, ...report });
+    logEvent(this.db, "connect", "info", "connection ended: TUG's copy of the key deleted", undefined, { id: row.id, ...report });
   }
 
-  stopAll(): void {
-    for (const r of this.running.values()) r.trader.stop();
+  /** A connection whose wallet never signed keeps no key: after 15 minutes it ends as failed and the key is deleted. */
+  expireSigning(now = Date.now()): number {
+    return this.db
+      .prepare("UPDATE connections SET status='failed', enc_privkey=NULL, nonce=NULL, error='no wallet signature within 15 minutes', updated_at=? WHERE status='signing' AND created_at < ?")
+      .run(now, now - 15 * 60_000).changes;
+  }
+
+  async stopAll(): Promise<void> {
+    await Promise.allSettled([...this.running.values()].map((r) => r.trader.stop()));
     this.running.clear();
   }
 }

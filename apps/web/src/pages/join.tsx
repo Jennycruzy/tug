@@ -16,7 +16,7 @@ interface ConnectView {
   fills: number;
   maker_fills: number;
   open_orders: number;
-  stop_report: { cancelled?: string[]; closed?: string[]; open_orders_after?: number } | null;
+  stop_report: { cancelled?: string[]; closed?: string[]; open_orders_after?: number; tries?: number; key?: string; strike_key_note?: string; strike_api_keys_page?: string } | null;
   error: string | null;
 }
 
@@ -188,7 +188,9 @@ function InYourAccount() {
       <p>
         Connect your own wallet and TUG trades your own Strike testnet account by the same rules, within a budget you set.
         Your wallet signs one message from Strike that lets TUG place orders for you; it cannot withdraw. TUG keeps that
-        trading key encrypted and deletes it when you press Stop. TUG's builder fee is 0.01% of each trade.
+        trading key encrypted and deletes its copy when you press Stop; the key stays listed on your Strike account until
+        you remove it on <a href="https://testnet.strikefinance.org/api-keys">Strike's API keys page</a>. TUG's builder fee
+        is 0.01% of each trade.
       </p>
       {err && <p class="note err">{err}</p>}
       {busy && <p class="note">{busy}</p>}
@@ -197,7 +199,8 @@ function InYourAccount() {
         <>
           {view?.status === "ended" && (
             <p class="note">
-              Stopped. TUG cancelled {view.stop_report?.cancelled?.length ?? 0} order(s){view.stop_report?.closed?.length ? ` and closed ${view.stop_report.closed.join(", ")}` : ""}, and deleted its key.{" "}
+              Stopped. TUG cancelled {view.stop_report?.cancelled?.length ?? 0} order(s){view.stop_report?.closed?.length ? ` and closed ${view.stop_report.closed.join(", ")}` : ""}, and deleted its copy of the key. To remove the key from your Strike account too, open{" "}
+              <a href={view.stop_report?.strike_api_keys_page ?? "https://testnet.strikefinance.org/api-keys"}>Strike's API keys page</a>.{" "}
               <button class="linkish" type="button" onClick={forget}>
                 Start again
               </button>
@@ -252,7 +255,11 @@ function InYourAccount() {
       {(view?.status === "active" || view?.status === "stopping") && (
         <div class="card kv">
           <span>Status</span>
-          <b>{view.status === "active" ? "TUG is trading your account" : "Stopping: cancelling TUG's orders…"}</b>
+          <b>
+            {view.status === "active"
+              ? "TUG is trading your account"
+              : `Stopping: cancelling TUG's orders${view.stop_report?.tries ? ` (try ${view.stop_report.tries}; ${view.stop_report.open_orders_after ?? 0} still open)` : ""}…`}
+          </b>
           <span>Strike account</span>
           <b>
             <code>{view.account}</code>

@@ -41,6 +41,20 @@ const verifiedReply = (pub: string) => ({
   raw: JSON.stringify({ account_id: "01a144dc-27e4-706c-ac46-9c2c1e77d60b", builder_code: "tug", fee_share_bps: 1, api_wallet_id: 1234, api_wallet_public_key: pub, api_wallet_expired_at: "9999-12-31T23:59:59Z" }),
 });
 
+/** A connection that was started, verified, activated and asked to stop (Strike's documented replies). */
+async function stoppingConnection() {
+  const { db, c } = connect();
+  let io = answerWith((_m, _u, body) => signatureReply(String(body?.public_key)));
+  const r = await c.start({ network: "testnet", chain: "cardano", address: ADDRESS }).finally(() => io.restore());
+  io = answerWith(() => verifiedReply(r.public_key));
+  await c.verify({ id: r.id, token: r.token, wallet_signature: "{}".padEnd(20, " ") }).finally(() => io.restore());
+  c.activate({ id: r.id, token: r.token, budget_usd: 50, accept_risk: true });
+  c.stop({ id: r.id, token: r.token, close_positions: false });
+  const prefix = `tug-v${rules.version}-${connectionNetwork(r.id)}-`;
+  const order = JSON.parse(R.order_open!.raw) as Record<string, unknown> & { ClientOrderID: string };
+  return { db, c, r, prefix, order };
+}
+
 function connect() {
   const db = openDb(":memory:");
   return { db, c: new Connect(db, { kek: KEK, code: "tug", feeBps: 1, strikeUrl: TESTNET }) };
@@ -61,7 +75,7 @@ describe("TUG in your account (Builder Connect)", () => {
     const t = new Trader(db, ex, rules, { network: "cabc", markets: rules.testnet_markets, tradingOn: () => true, pausedFile: "/nonexistent/p", keyFile: { hex: SECRET }, budgetUsd: 50 });
     const held = JSON.parse(R.positions_one!.raw) as { positions: Array<{ symbol: string; size: string }> };
     const pos = held.positions[0]!;
-    const io = answerWith(() => R.positions_one!);
+    const io = answerWith((_m, url) => (url.includes("/v2/openOrders") ? R.open_orders_empty! : R.positions_one!));
     try {
       const limit = 50 * rules.gross_exposure_cap;
       const price = 2400;
@@ -156,6 +170,98 @@ describe("TUG in your account (Builder Connect)", () => {
     // Every order request carried the builder fee; the cancel did not need it.
     expect(io.sent.filter((s) => s.method === "DELETE").every((s) => s.headers["X-Builder-Fee-Bps"] === undefined)).toBe(true);
     expect(c.view(r.id, r.token)).toMatchObject({ status: "ended", key_held: false });
+  });
+
+  it("Stop keeps the key while an order placed during the cancel pass is still open, and finishes on the next pass", async () => {
+    const { db, c, r, prefix, order } = await stoppingConnection();
+    // Pass 1: one order is cancelled, but another (from a tick that was still running) is open on read-back.
+    let open = [{ ...order, ClientOrderID: `${prefix}1-ETH-USD-0` }];
+    let afterCancel = [{ ...order, ClientOrderID: `${prefix}2-ETH-USD-0` }];
+    const runner = new ConnectRunner(db, rules, { kek: KEK, strikeUrl: TESTNET, feeBps: 1, stateDir: "/nonexistent", killFile: "/nonexistent/kill", pollMs: 1 });
+    const strike = () =>
+      answerWith((method, url, body) => {
+        if (method === "DELETE") {
+          open = open.filter((o) => o.ClientOrderID !== body?.client_order_id);
+          if (open.length === 0) [open, afterCancel] = [afterCancel, []];
+          return { status: 200, raw: JSON.stringify({ order_id: 1, client_order_id: body?.client_order_id, symbol: "ETH-USD", sequence_id: 1, message_id: "1-0" }) };
+        }
+        if (url.includes("/v2/openOrders")) return { status: 200, raw: JSON.stringify({ count: open.length, orders: open }) };
+        if (url.includes("/v2/positions")) return { status: 200, raw: '{"count":0,"positions":[]}' };
+        return { status: 404, raw: "{}" };
+      });
+    let io = strike();
+    await runner.tick().finally(() => io.restore());
+    let row = db.prepare("SELECT * FROM connections").get() as ConnectRow;
+    expect(row.status).toBe("stopping");
+    expect(row.enc_privkey).not.toBeNull();
+    expect(JSON.parse(row.stop_report!)).toMatchObject({ tries: 1, open_orders_after: 1, key: "kept" });
+    // Pass 2: the late order is cancelled, nothing is left, the key is deleted.
+    io = strike();
+    await runner.tick().finally(() => io.restore());
+    row = db.prepare("SELECT * FROM connections").get() as ConnectRow;
+    expect(row.status).toBe("ended");
+    expect(row.enc_privkey).toBeNull();
+    expect(JSON.parse(row.stop_report!)).toMatchObject({ tries: 2, open_orders_after: 0, key: "deleted", cancelled: [`${prefix}2-ETH-USD-0`] });
+    expect(c.view(r.id, r.token).stop_report).toMatchObject({ strike_api_keys_page: "https://testnet.strikefinance.org/api-keys" });
+  });
+
+  it("Stop logs E-STOP-OPEN from the third try while an order will not go away, and never deletes the key meanwhile", async () => {
+    const { db, prefix, order } = await stoppingConnection();
+    const stuck = [{ ...order, ClientOrderID: `${prefix}9-ETH-USD-0` }];
+    const runner = new ConnectRunner(db, rules, { kek: KEK, strikeUrl: TESTNET, feeBps: 1, stateDir: "/nonexistent", killFile: "/nonexistent/kill", pollMs: 1 });
+    for (let i = 0; i < 3; i++) {
+      const io = answerWith((method, url, body) =>
+        method === "DELETE"
+          ? { status: 200, raw: JSON.stringify({ order_id: 1, client_order_id: body?.client_order_id, symbol: "ETH-USD", sequence_id: 1, message_id: "1-0" }) }
+          : url.includes("/v2/openOrders")
+            ? { status: 200, raw: JSON.stringify({ count: 1, orders: stuck }) }
+            : { status: 200, raw: '{"count":0,"positions":[]}' },
+      );
+      await runner.tick().finally(() => io.restore());
+    }
+    const row = db.prepare("SELECT status, enc_privkey FROM connections").get() as ConnectRow;
+    expect(row.status).toBe("stopping");
+    expect(row.enc_privkey).not.toBeNull();
+    expect((db.prepare("SELECT COUNT(*) AS n FROM events WHERE code='E-STOP-OPEN'").get() as { n: number }).n).toBe(1);
+  });
+
+  it("the budget check counts TUG's own resting orders on the same side", async () => {
+    const db = openDb(":memory:");
+    const ex = new Executor(db, new StrikeSigned(SECRET, "https://example.invalid"), "cabc", { trading: true, killFile: "/nonexistent/kill" });
+    const t = new Trader(db, ex, rules, { network: "cabc", markets: rules.testnet_markets, tradingOn: () => true, pausedFile: "/nonexistent/p", keyFile: { hex: SECRET }, budgetUsd: 50 });
+    const order = JSON.parse(R.order_open!.raw) as Record<string, unknown>;
+    // No position; a resting TUG buy of 0.03 ETH ($72 at 2400); a new buy of 0.02 ($48) would make $120 > $100.
+    const resting = { ...order, ClientOrderID: "tug-v1-cabc-1-ETH-USD-0", Side: "buy", Size: "0.03", Filled: "0" };
+    const io = answerWith((_m, url) => (url.includes("/v2/openOrders") ? { status: 200, raw: JSON.stringify({ count: 1, orders: [resting] }) } : { status: 200, raw: '{"count":0,"positions":[]}' }));
+    try {
+      expect(await t.withinBudget({ symbol: "ETH-USD", side: "buy", price: "2400", size: "0.02" })).toBe(false);
+      expect(await t.withinBudget({ symbol: "ETH-USD", side: "buy", price: "2400", size: "0.01" })).toBe(true);
+    } finally {
+      io.restore();
+    }
+  });
+
+  it("a connection whose wallet never signed ends after 15 minutes with its key deleted", async () => {
+    const { db, c } = connect();
+    const io = answerWith((_m, _u, body) => signatureReply(String(body?.public_key)));
+    await c.start({ network: "testnet", chain: "cardano", address: ADDRESS }).finally(() => io.restore());
+    const runner = new ConnectRunner(db, rules, { kek: KEK, strikeUrl: TESTNET, feeBps: 1, stateDir: "/nonexistent", killFile: "/nonexistent/kill" });
+    expect(runner.expireSigning(Date.now() + 14 * 60_000)).toBe(0);
+    expect(runner.expireSigning(Date.now() + 16 * 60_000)).toBe(1);
+    expect(db.prepare("SELECT status, enc_privkey FROM connections").get()).toEqual({ status: "failed", enc_privkey: null });
+  });
+
+  it("trader.stop() resolves only after a tick that was already running has finished", async () => {
+    const db = openDb(":memory:");
+    const ex = new Executor(db, new StrikeSigned(SECRET, "https://example.invalid"), "cabc", { trading: true, killFile: "/nonexistent/kill" });
+    const t = new Trader(db, ex, rules, { network: "cabc", markets: rules.testnet_markets, tradingOn: () => true, pausedFile: "/nonexistent/p", keyFile: { hex: SECRET } });
+    let finish!: () => void;
+    let tickDone = false;
+    void t.track(new Promise<void>((res) => (finish = res)).then(() => (tickDone = true)));
+    const stopped = t.stop().then(() => tickDone);
+    await new Promise((r) => setTimeout(r, 20));
+    finish();
+    expect(await stopped).toBe(true);
   });
 
   it("every order a connected account sends carries X-Builder-Fee-Bps", async () => {

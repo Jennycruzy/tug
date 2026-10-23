@@ -43,6 +43,8 @@ export class Trader {
   private flattenTries = 0;
   private riskBusy = false;
   private timers: NodeJS.Timeout[] = [];
+  private readonly inflight = new Set<Promise<unknown>>();
+  private stopped = false;
 
   constructor(
     private readonly db: Db,
@@ -67,17 +69,20 @@ export class Trader {
       status: (s) => logEvent(this.db, "userstream", s.state === "closed" ? "warn" : "info", `user stream ${s.state}`, s.state === "closed" ? "E-WS" : undefined, s),
     }, { vaultId: this.cfg.vaultId });
     this.stream.start();
-    const every = (ms: number, fn: () => Promise<void>) => this.timers.push(setInterval(() => void fn().catch((e) => this.fail(e)), ms));
+    const every = (ms: number, fn: () => Promise<void>) =>
+      this.timers.push(setInterval(() => void (this.stopped ? undefined : this.track(fn().catch((e) => this.fail(e)))), ms));
     every(MARKS_EVERY_MS, () => this.readMarkets());
     every(RISK_EVERY_MS, () => this.riskTick());
     every(TRADE_EVERY_MS, () => this.tradeTick());
     every(60_000, () => this.syncFills().then(() => this.syncMoney()));
     every(60_000, () => this.sampleDepth());
-    void this.readMarkets()
-      .then(() => this.leverageForHeld())
-      .then(() => this.riskTick())
-      .then(() => this.syncMoney())
-      .catch((e) => this.fail(e));
+    void this.track(
+      this.readMarkets()
+        .then(() => this.leverageForHeld())
+        .then(() => this.riskTick())
+        .then(() => this.syncMoney())
+        .catch((e) => this.fail(e)),
+    );
   }
 
   /** At start: every market TUG already holds gets the rules' leverage (read back), before any new order. */
@@ -92,9 +97,19 @@ export class Trader {
     }
   }
 
-  stop(): void {
+  /** Keeps a running tick in view, so stop() can wait for it. */
+  track<T>(p: Promise<T>): Promise<T> {
+    this.inflight.add(p);
+    void p.finally(() => this.inflight.delete(p));
+    return p;
+  }
+
+  /** Stops the timers and the stream, then resolves once every tick already running has finished (an order it was placing included). */
+  async stop(): Promise<void> {
+    this.stopped = true;
     for (const t of this.timers) clearInterval(t);
     this.stream?.stop();
+    await Promise.allSettled([...this.inflight]);
   }
 
   private fail(e: unknown): void {
@@ -274,9 +289,13 @@ export class Trader {
     if (this.cfg.budgetUsd === undefined) return true;
     const held = await this.ex.positions();
     const mark = (s: string) => this.marketsCache?.markets[s]?.mark_price ?? Number(w.price);
-    const signed = (Number(w.size) * (w.side === "buy" ? 1 : -1));
-    const before = Number(held[w.symbol]?.size ?? 0);
-    const after = before + signed;
+    const sign = w.side === "buy" ? 1 : -1;
+    // TUG's own orders already resting on the same side count as if filled.
+    const resting = (await this.ex.openOrders(w.symbol))
+      .filter((o) => o.ClientOrderID.startsWith(`tug-v${this.rules.version}-${this.cfg.network}-`) && o.Side.toLowerCase() === w.side)
+      .reduce((a, o) => a + Number(o.Size) - Number(o.Filled), 0);
+    const before = Number(held[w.symbol]?.size ?? 0) + sign * resting;
+    const after = before + sign * Number(w.size);
     if (Math.abs(after) <= Math.abs(before)) return true;
     const gross = Object.entries(held).reduce((a, [s, p]) => a + (s === w.symbol ? 0 : Math.abs(Number(p.size)) * mark(s)), 0) + Math.abs(after) * mark(w.symbol);
     const limit = this.cfg.budgetUsd * this.rules.gross_exposure_cap;
