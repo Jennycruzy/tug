@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { loadRules } from "@tug/core";
+import { StrikeSigned } from "@tug/strike";
 import { buildApi } from "../src/api.js";
+import { Executor } from "../src/executor.js";
+import { Trader } from "../src/trader.js";
 import type { Db } from "../src/db.js";
 import { OPENAPI } from "../src/openapi.js";
 import { fixtureDb } from "./fixture-db.js";
@@ -45,7 +49,9 @@ describe("the live record (real mainnet rows)", () => {
     expect(live.curve[0].at).toBe(LIVE.live_equity[0]!.ts);
     expect(live.curve.at(-1).at).toBe(LIVE.live_equity.at(-1)!.ts);
     expect(live.curve.length).toBeLessThan(LIVE.live_equity.length / 3);
-    expect(r.body).not.toContain(ACCOUNT);
+    // The full account id appears only inside the links to Strike's own public records.
+    expect(JSON.stringify({ ...live, links: null })).not.toContain(ACCOUNT);
+    expect(live.links.strike_fills).toBe(`https://api.strikefinance.org/v2/history/fill?account_id=${ACCOUNT}`);
     await app.close();
   });
 
@@ -85,6 +91,72 @@ describe("the live record (real mainnet rows)", () => {
     const app = buildApi(fixtureDb(), ctx);
     expect((await app.inject({ url: "/api/v1/record" })).json().live).toBeNull();
     expect((await app.inject({ url: "/api/v1/record/fills" })).json().fills).toEqual([]);
+    await app.close();
+  });
+});
+
+// Real rows around the owner's top-up (04:11:19 UTC) and Strike's public deposit records for the account.
+const TOPUP = JSON.parse(readFileSync(new URL("./fixtures/live-topup-mainnet-2026-10-23.json", import.meta.url), "utf8")) as {
+  live_equity: Array<{ network: string; ts: number; equity: number; positions_json: string }>;
+  transactions_reply: { status: number; raw: string };
+};
+
+describe("money put in comes from Strike's deposit records (real top-up, 23 Oct)", () => {
+  /** Runs the trader's own transfer sync against Strike's real reply, then serves the record. */
+  async function withTopup() {
+    const db = fixtureDb();
+    const eq = db.prepare("INSERT INTO live_equity (network, ts, equity, positions_json) VALUES (?,?,?,?)");
+    for (const r of TOPUP.live_equity) eq.run(r.network, r.ts, r.equity, r.positions_json);
+    const ex = new Executor(db, new StrikeSigned("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60", "https://example.invalid"), "mainnet", { trading: true, killFile: "/nonexistent/kill" });
+    const trader = new Trader(db, ex, loadRules("rules/tug-rules-v1.json").rules, { network: "mainnet", markets: "all", tradingOn: () => true, pausedFile: "/nonexistent/paused", keyFile: "unused" });
+    trader.setAccountIdForCheck(ACCOUNT);
+    const real = globalThis.fetch;
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      urls.push(url);
+      return new Response(TOPUP.transactions_reply.raw, { status: TOPUP.transactions_reply.status });
+    }) as typeof fetch;
+    try {
+      await trader.syncTransfers();
+    } finally {
+      globalThis.fetch = real;
+    }
+    return { db, urls };
+  }
+
+  it("the trader stores both deposits from Strike's own records, with their Cardano transaction hashes", async () => {
+    const { db, urls } = await withTopup();
+    expect(urls[0]).toContain(`/v2/history/transaction?account_id=${ACCOUNT}&type=deposit,withdraw,transfer,reward_grant`);
+    const rows = db.prepare("SELECT type, amount, tx_hash FROM transfers ORDER BY ts").all() as Array<{ type: string; amount: number; tx_hash: string }>;
+    expect(rows.map((r) => [r.type, r.amount])).toEqual([
+      ["deposit", 18.709836],
+      ["deposit", 14.083852],
+    ]);
+    expect(rows.every((r) => /^[0-9a-f]{64}#0$/.test(r.tx_hash))).toBe(true);
+    expect((db.prepare("SELECT COUNT(*) AS n FROM events WHERE code='E-TRANSFER'").get() as { n: number }).n).toBe(0);
+  });
+
+  it("the curve's result does not jump at the top-up, and low and high are on the result", async () => {
+    const { db } = await withTopup();
+    const app = buildApi(db, { ...ctx, liveNickname: "tug-mainnet" });
+    const r = await app.inject({ url: "/api/v1/record" });
+    expect(check(r.json(), schemaOf("/api/v1/record"), root)).toEqual([]);
+    const live = r.json().live;
+    expect(live.start_equity).toBeCloseTo(32.793688, 9);
+    expect(live.money_moves.map((m: { amount: number }) => m.amount)).toEqual([18.709836, 14.083852]);
+    const curve = live.curve as Array<{ at: number; equity: number; put_in: number; result: number }>;
+    const deposit = 1792728679155;
+    const before = curve.filter((p) => p.at < deposit).at(-1)!;
+    const after = curve.find((p) => p.at > deposit)!;
+    // Equity jumps by the $14.08 top-up; the result moves by cents.
+    expect(after.equity - before.equity).toBeGreaterThan(14);
+    expect(Math.abs(after.result - before.result)).toBeLessThan(0.05);
+    expect(before.put_in).toBeCloseTo(18.709836, 9);
+    expect(after.put_in).toBeCloseTo(32.793688, 9);
+    const results = curve.map((p) => p.result);
+    expect(Math.min(...results)).toBeGreaterThan(-1);
+    expect(Math.max(...results)).toBeLessThan(1);
+    expect(live.links.strike_page).toBe("https://app.strikefinance.org/public-portfolio/@tug-mainnet");
     await app.close();
   });
 });

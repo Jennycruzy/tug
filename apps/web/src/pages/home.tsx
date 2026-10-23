@@ -45,7 +45,7 @@ export function Home() {
         <div class="hero-copy">
           <LivePill />
           <h1 class="display">
-            Strike already knows who wins and who loses. <em>TUG trades the gap.</em>
+            Strike already scores which traders to copy and which to fade. <em>TUG trades the gap.</em>
           </h1>
           <p class="lede">
             Strike marks some traders as worth copying and others as worth betting against. TUG watches what both

@@ -37,6 +37,7 @@ export class Trader {
   private busy = false;
   private stream: UserStream | undefined;
   private accountStatus = "trading";
+  private accountId: string | undefined;
   private flattenTries = 0;
   private riskBusy = false;
   private timers: NodeJS.Timeout[] = [];
@@ -60,7 +61,7 @@ export class Trader {
           this.ex.noteStreamOrder(o.c, o.X, String(o.cr ?? ""), o.i);
         }
       },
-      resync: () => void this.syncFills(),
+      resync: () => void this.syncFills().then(() => this.syncTransfers()),
       status: (s) => logEvent(this.db, "userstream", s.state === "closed" ? "warn" : "info", `user stream ${s.state}`, s.state === "closed" ? "E-WS" : undefined, s),
     }, { vaultId: this.cfg.vaultId });
     this.stream.start();
@@ -68,10 +69,11 @@ export class Trader {
     every(MARKS_EVERY_MS, () => this.readMarkets());
     every(RISK_EVERY_MS, () => this.riskTick());
     every(TRADE_EVERY_MS, () => this.tradeTick());
-    every(60_000, () => this.syncFills());
+    every(60_000, () => this.syncFills().then(() => this.syncTransfers()));
     void this.readMarkets()
       .then(() => this.leverageForHeld())
       .then(() => this.riskTick())
+      .then(() => this.syncTransfers())
       .catch((e) => this.fail(e));
   }
 
@@ -128,6 +130,7 @@ export class Trader {
 
   private async riskTickOnce(): Promise<void> {
     const acct = await this.ex.account();
+    this.accountId = acct.accountId;
     const pos = await this.ex.positions();
     const now = Date.now();
     const lastMinute = this.db.prepare("SELECT MAX(ts) AS ts FROM live_equity WHERE network=?").get(this.cfg.network) as { ts: number | null };
@@ -247,6 +250,11 @@ export class Trader {
     if (w && !keep && this.mayPlace()) await this.placeWithRequote(w, 0);
   }
 
+  /** Tests only: the account id the risk tick would have read from Strike. */
+  setAccountIdForCheck(id: string): void {
+    this.accountId = id;
+  }
+
   /** Testnet checks only: start a rebalance from given targets, or age the market data. */
   setTargetsForCheck(targets: Record<string, number>): void {
     this.targets = targets;
@@ -294,6 +302,24 @@ export class Trader {
       const price = (o.side === "buy" ? Number(o.price) - tick : Number(o.price) + tick).toFixed(d);
       logEvent(this.db, "trader", "info", "re-quote one tick away", undefined, { symbol: o.symbol, from: o.price, to: price });
       await this.placeWithRequote({ ...o, price }, 1);
+    }
+  }
+
+  /**
+   * Pulls the account's money in and out from Strike's transaction history into `transfers`: deposits add to the
+   * money put in, withdrawals take from it. Any other kind (internal transfer, reward) is stored and flagged with
+   * E-TRANSFER, never counted silently.
+   */
+  async syncTransfers(): Promise<void> {
+    if (!this.accountId) return;
+    const r = await this.ex.read(`/v2/history/transaction?account_id=${encodeURIComponent(this.accountId)}&type=deposit,withdraw,transfer,reward_grant&limit=100`);
+    const rows = ((r as { transactions?: Array<Record<string, unknown>> | null }).transactions ?? []) as Array<Record<string, unknown>>;
+    const ins = this.db.prepare("INSERT OR IGNORE INTO transfers (network, id, type, amount, ts, status, tx_hash, raw) VALUES (?,?,?,?,?,?,?,?)");
+    for (const t of rows) {
+      const added = ins.run(this.cfg.network, t.id, t.type, Number(t.amount), t.timestamp, t.status ?? null, t.tx_hash ?? null, JSON.stringify(t)).changes;
+      if (added && t.type !== "deposit" && t.type !== "withdraw") {
+        logEvent(this.db, "trader", "warn", `Strike recorded a ${String(t.type)} of ${String(t.amount)}; it is not counted as money put in`, "E-TRANSFER", { id: t.id, type: t.type, amount: t.amount });
+      }
     }
   }
 

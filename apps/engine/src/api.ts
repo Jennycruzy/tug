@@ -16,8 +16,10 @@ export interface ApiContext {
   revision: string;
   /** All money put into the live account, top-ups included (TUG_START_EQUITY); otherwise its first stored minute. */
   liveStartEquity?: number;
-  /** The live account's Strike id; only a shortened form is ever served. */
+  /** The live account's Strike id: shortened in text, in full only inside links to Strike's own public records. */
   liveAccountId?: string;
+  /** The live account's nickname on Strike, for its public trader page. */
+  liveNickname?: string;
 }
 
 interface SnapshotRow {
@@ -261,16 +263,42 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
   const fillSumQ = db.prepare(
     "SELECT COUNT(*) AS n, SUM(role='maker') AS maker, COALESCE(SUM(fee),0) AS fees, COALESCE(SUM(realized_pnl),0) AS realized, COALESCE(SUM(price*size),0) AS traded FROM fills WHERE network=?",
   );
-  /** The live account's record from stored rows only: equity each minute (one point per 5 minutes served), fills, positions. */
+  const transfersQ = db.prepare("SELECT ts, type, amount, tx_hash FROM transfers WHERE network=? AND type IN ('deposit','withdraw') ORDER BY ts, id");
+  /** Links to Strike's own public records of the live account (mainnet). */
+  const strikeLinks = () =>
+    ctx.liveAccountId
+      ? {
+          strike_page: `https://app.strikefinance.org/public-portfolio/${ctx.liveNickname ? `@${ctx.liveNickname}` : ctx.liveAccountId}`,
+          strike_fills: `https://api.strikefinance.org/v2/history/fill?account_id=${ctx.liveAccountId}`,
+          strike_positions: `https://api.strikefinance.org/v2/positions?account_id=${ctx.liveAccountId}`,
+          strike_deposits: `https://api.strikefinance.org/v2/history/transaction?account_id=${ctx.liveAccountId}&type=deposit,withdraw`,
+        }
+      : null;
+
+  /**
+   * The live account's record from stored rows only: equity each minute (one point per 5 minutes served), fills,
+   * positions. Money put in comes from Strike's own deposit and withdrawal records; the curve's `result` is equity
+   * minus the money put in up to that moment, so a top-up is never drawn as a gain.
+   */
   const liveRecord = (network: string) => {
     const curve = liveCurveQ.all(network) as Array<{ ts: number; equity: number }>;
     if (curve.length === 0) return null;
     const first = curve[0]!;
     const last = curve[curve.length - 1]!;
     const f = fillSumQ.get(network) as { n: number; maker: number | null; fees: number; realized: number; traded: number };
-    const startEquity = network === "mainnet" && ctx.liveStartEquity ? ctx.liveStartEquity : first.equity;
+    const moves = (transfersQ.all(network) as Array<{ ts: number; type: string; amount: number; tx_hash: string | null }>).map((t) => ({
+      at: t.ts,
+      type: t.type as "deposit" | "withdraw",
+      amount: t.type === "deposit" ? Math.abs(t.amount) : -Math.abs(t.amount),
+      tx_hash: t.tx_hash,
+    }));
+    const fallback = network === "mainnet" && ctx.liveStartEquity ? ctx.liveStartEquity : first.equity;
+    const putInAt = (ts: number) => (moves.length ? moves.filter((m) => m.at <= ts).reduce((a, m) => a + m.amount, 0) : fallback);
+    const startEquity = moves.length ? moves.reduce((a, m) => a + m.amount, 0) : fallback;
     const step = 5 * 60_000;
-    const thinned = curve.filter((p, i) => i === 0 || i === curve.length - 1 || Math.floor(p.ts / step) !== Math.floor(curve[i - 1]!.ts / step));
+    // Keep each 5-minute bucket's first point, the last point, and the minutes either side of every deposit or withdrawal.
+    const near = (ts: number) => moves.some((m) => Math.abs(m.at - ts) <= 60_000);
+    const thinned = curve.filter((p, i) => i === 0 || i === curve.length - 1 || near(p.ts) || Math.floor(p.ts / step) !== Math.floor(curve[i - 1]!.ts / step));
     return {
       label: network === "mainnet" ? "LIVE" : "TESTNET",
       account: network === "mainnet" && ctx.liveAccountId ? short(ctx.liveAccountId) : null,
@@ -284,7 +312,12 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
       fees: f.fees,
       realized: f.realized,
       positions: Object.entries(livePositions(network)).map(([symbol, p]) => ({ symbol, size: Number(p.size), entry: p.entry, upnl: p.upnl })),
-      curve: thinned.map((p) => ({ at: p.ts, equity: p.equity })),
+      money_moves: moves,
+      links: network === "mainnet" ? strikeLinks() : null,
+      curve: thinned.map((p) => {
+        const putIn = putInAt(p.ts);
+        return { at: p.ts, equity: p.equity, put_in: putIn, result: p.equity - putIn };
+      }),
     };
   };
 
@@ -306,7 +339,7 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
     if (network !== "mainnet" && network !== "testnet") return reply.code(400).send({ code: "E-NETWORK", message: "network is mainnet or testnet." });
     const fills = fillsQ.all(network) as Array<{ ts: number; symbol: string; side: string; role: string | null; price: number; size: number; fee: number; realized_pnl: number; order_id: number | null; client_order_id: string | null }>;
     // Negative fee = maker rebate. Strike's fill history can omit the client order id; Strike's order id is always kept.
-    return { network, fills: fills.map((x) => ({ at: x.ts, symbol: x.symbol, side: x.side, role: x.role, price: x.price, size: x.size, fee: x.fee, realized: x.realized_pnl, order_id: x.order_id, client_order_id: x.client_order_id })) };
+    return { network, strike_fills: network === "mainnet" ? (strikeLinks()?.strike_fills ?? null) : null, fills: fills.map((x) => ({ at: x.ts, symbol: x.symbol, side: x.side, role: x.role, price: x.price, size: x.size, fee: x.fee, realized: x.realized_pnl, order_id: x.order_id, client_order_id: x.client_order_id })) };
   });
 
   app.get("/api/v1/paper", async () => {

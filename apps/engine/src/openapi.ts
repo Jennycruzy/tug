@@ -95,7 +95,9 @@ const schemas: Record<string, Schema> = {
     fees: num,
     realized: num,
     positions: arr(obj({ symbol: str, size: num, entry: num, upnl: num })),
-    curve: arr(obj({ at: int, equity: num })),
+    money_moves: arr(obj({ at: int, type: { type: "string", enum: ["deposit", "withdraw"] }, amount: num, tx_hash: nullable(str) })),
+    links: nullOr(obj({ strike_page: str, strike_fills: str, strike_positions: str, strike_deposits: str })),
+    curve: arr(obj({ at: int, equity: num, put_in: num, result: num })),
   }),
   Fill: obj({
     at: int,
@@ -115,7 +117,7 @@ const schemas: Record<string, Schema> = {
     vault: { type: "null" },
     paper: nullOr(ref("RecordPaper")),
   }),
-  Fills: obj({ network: { type: "string", enum: ["mainnet", "testnet"] }, fills: arr(ref("Fill")) }),
+  Fills: obj({ network: { type: "string", enum: ["mainnet", "testnet"] }, strike_fills: nullable(str), fills: arr(ref("Fill")) }),
   Paper: {
     type: "object",
     additionalProperties: false,
@@ -251,7 +253,8 @@ OpenAPI 3.1: https://tug.38-49-216-59.sslip.io/api/openapi.json
 - GET /api/v1/tug/ETH-USD: one market, the largest members, and 24 hours of lean history.
 - GET /api/v1/crowds: the current crowd lists, built from Strike's /v2/copy/discover scores and tags.
 - GET /api/v1/record: records. "live" is the real account (label LIVE on mainnet, TESTNET on testnet): equity, fills,
-  fees (negative = maker rebate), realized result, positions. "paper" is labelled MODEL: a calculation from real
+  fees (negative = maker rebate), realized result, positions, money put in (Strike's own deposit records), a curve
+  whose "result" is equity minus money put in so far, and links to Strike's public records of the account. "paper" is labelled MODEL: a calculation from real
   Strike prices, not trades.
 - GET /api/v1/record/fills: the live account's fills, newest first, with Strike order ids (fee negative = rebate).
 - GET /api/v1/paper: the paper record (MODEL) with the targets of the last rebalance.

@@ -1,6 +1,8 @@
 import { ago, day, signed, time, usd, useApi, type FillsReply, type LiveRecord, type RecordReply } from "../api.js";
 
-const cents = (v: number) => `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** Dollars and cents; a value that rounds to zero cents shows as $0.00, never −$0.00. */
+const cents = (v: number) => `${v <= -0.005 ? "−" : ""}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const signedCents = (v: number) => (Math.abs(v) < 0.005 ? "$0.00" : `${v > 0 ? "+" : "−"}${cents(Math.abs(v))}`);
 import { LineChart } from "../chart.js";
 import { useNow } from "../now.js";
 
@@ -99,6 +101,8 @@ function Live({ l, now }: { l: LiveRecord; now: number }) {
         <b>
           {cents(l.equity)} ({signed((change / l.start_equity) * 100)}%)
         </b>
+        <span>Result</span>
+        <b>{signedCents(change)}</b>
         <span>Money put in</span>
         <b>{cents(l.start_equity)}</b>
         <span>Fills</span>
@@ -110,12 +114,54 @@ function Live({ l, now }: { l: LiveRecord; now: number }) {
         <span>Fees</span>
         <b>{l.fees <= 0 ? `${fine(-l.fees)} rebate earned` : `${fine(l.fees)} paid`}</b>
         <span>Closed trades</span>
-        <b>{l.realized === 0 ? "None closed yet" : `${l.realized > 0 ? "+" : "−"}${cents(Math.abs(l.realized)).replace("−", "")}`}</b>
+        <b>{l.realized === 0 ? "None closed yet" : signedCents(l.realized)}</b>
         <span>Updated</span>
         <b>{ago(l.at, now)}</b>
       </div>
-      <h2>Live equity</h2>
-      <LineChart points={l.curve.map((c) => ({ at: c.at, v: c.equity }))} label="Live account equity over time" format={cents} />
+      {l.links && (
+        <p class="strike-links">
+          On Strike: <a href={l.links.strike_page}>TUG's public trader page</a> · <a href={l.links.strike_fills}>fills</a> ·{" "}
+          <a href={l.links.strike_positions}>positions</a> · <a href={l.links.strike_deposits}>deposits</a>
+        </p>
+      )}
+      <h2>Result over time</h2>
+      <p class="note small">Equity minus the money put in up to that moment, so a top-up is never drawn as a gain.</p>
+      <LineChart points={l.curve.map((c) => ({ at: c.at, v: c.result }))} label="Live result over time: equity minus money put in" format={signedCents} />
+      {l.money_moves.length > 0 && (
+        <>
+          <h2>Money put in</h2>
+          <table class="members">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Amount</th>
+                <th>Cardano transaction</th>
+              </tr>
+            </thead>
+            <tbody>
+              {l.money_moves.map((m) => (
+                <tr key={`${m.at}-${m.amount}`}>
+                  <td>
+                    {time(m.at)} {day(m.at).slice(5)}
+                  </td>
+                  <td>
+                    {m.type === "deposit" ? "Deposit" : "Withdrawal"} {cents(Math.abs(m.amount))}
+                  </td>
+                  <td>
+                    {m.tx_hash ? (
+                      <a href={`https://cardanoscan.io/transaction/${m.tx_hash.split("#")[0]}`}>
+                        <code>{m.tx_hash.slice(0, 10)}…</code>
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
       <h2>Live positions</h2>
       {l.positions.length === 0 ? (
         <p class="note">Flat: no open position.</p>
@@ -137,7 +183,7 @@ function Live({ l, now }: { l: LiveRecord; now: number }) {
                 </td>
                 <td>{`${x.size > 0 ? "Long" : "Short"} ${Math.abs(x.size)}`}</td>
                 <td>{x.entry}</td>
-                <td>{cents(x.upnl)}</td>
+                <td>{signedCents(x.upnl)}</td>
               </tr>
             ))}
           </tbody>

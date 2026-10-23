@@ -152,6 +152,17 @@ CREATE TABLE IF NOT EXISTS records_json (
   computed_at INTEGER NOT NULL,
   json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS transfers (
+  network TEXT NOT NULL,
+  id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  amount REAL NOT NULL,
+  ts INTEGER NOT NULL,
+  status TEXT,
+  tx_hash TEXT,
+  raw TEXT NOT NULL,
+  PRIMARY KEY (network, id)
+);
 CREATE TABLE IF NOT EXISTS strike_calls (
   id INTEGER PRIMARY KEY,
   network TEXT NOT NULL,

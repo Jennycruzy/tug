@@ -261,3 +261,6 @@ main > .page:not(.wide) { max-width: 820px; }
 .tag.live { background: var(--copy); color: var(--card); }
 .scroll { overflow-x: auto; }
 .scroll table { min-width: 520px; }
+.strike-links { font-size: 14px; color: var(--muted); }
+.strike-links a { color: var(--ink); }
+.note.small { font-size: 13px; margin-top: -4px; }

@@ -136,7 +136,9 @@ export interface LiveRecord {
   fees: number;
   realized: number;
   positions: Array<{ symbol: string; size: number; entry: number; upnl: number }>;
-  curve: Array<{ at: number; equity: number }>;
+  money_moves: Array<{ at: number; type: "deposit" | "withdraw"; amount: number; tx_hash: string | null }>;
+  links: { strike_page: string; strike_fills: string; strike_positions: string; strike_deposits: string } | null;
+  curve: Array<{ at: number; equity: number; put_in: number; result: number }>;
 }
 
 export interface Fill {
@@ -154,6 +156,7 @@ export interface Fill {
 
 export interface FillsReply {
   network: "mainnet" | "testnet";
+  strike_fills: string | null;
   fills: Fill[];
 }
 
