@@ -27,7 +27,7 @@ const schemaOf = (path: string) => root.paths[path]!.get!.responses["200"]!.cont
 const ctx = { network: "mainnet", rulesSha256: "0".repeat(64), rulesVersion: 1, recordStartMs: 0, revision: "test" };
 
 /** Answers with the given replies by URL and records every request. */
-function stub(answer: (method: string, url: string) => { status: number; raw: string }) {
+function answerWith(answer: (method: string, url: string) => { status: number; raw: string }) {
   const sent: Array<{ method: string; url: string; body: Record<string, unknown> | null }> = [];
   const real = globalThis.fetch;
   globalThis.fetch = (async (url: string, init?: RequestInit) => {
@@ -58,9 +58,9 @@ describe("the vault runs on Strike testnet only", () => {
     expect(vaultNetworkError(false, "https://api.strikefinance.org")).toBeNull();
   });
 
-  it("/api/v1/record?network=testnet carries the vault (SPEC §11)", async () => {
+  it("/api/v1/record?network=testnet carries the vault (the API docs)", async () => {
     const { db, trader } = vaultTrader();
-    const io = stub(vaultReplies());
+    const io = answerWith(vaultReplies());
     try {
       await trader.syncMoney();
     } finally {
@@ -77,7 +77,7 @@ describe("the executor on a vault (Strike's vault-leader rules)", () => {
   it("every write carries vault_id in the body and every read carries it as a query parameter", async () => {
     const { ex } = vaultTrader();
     ex.setLeverageConfirmedForCheck("ETH-USD");
-    const io = stub((method, url) => (method === "POST" ? R.order_accepted! : url.includes("/v2/positions") ? R.positions_one! : R.order_open!));
+    const io = answerWith((method, url) => (method === "POST" ? R.order_accepted! : url.includes("/v2/positions") ? R.positions_one! : R.order_open!));
     try {
       await ex.placePostOnly({ symbol: "ETH-USD", side: "buy", price: "2384.50", size: "0.006", clientOrderId: "tug-v1-vault-1-ETH-USD-0", reason: "check" });
       await ex.positions();
@@ -94,7 +94,7 @@ describe("the executor on a vault (Strike's vault-leader rules)", () => {
   it("an account without a vault sends no vault_id", async () => {
     const db = fixtureDb();
     const ex = new Executor(db, new StrikeSigned(SECRET, "https://example.invalid"), "testnet", { trading: true, killFile: "/nonexistent/kill", pollMs: 1 });
-    const io = stub(() => ({ status: 200, raw: '{"count":0,"positions":[]}' }));
+    const io = answerWith(() => ({ status: 200, raw: '{"count":0,"positions":[]}' }));
     try {
       await ex.positions();
     } finally {
@@ -107,7 +107,7 @@ describe("the executor on a vault (Strike's vault-leader rules)", () => {
 describe("the vault record (real testnet vault replies)", () => {
   it("stores Strike's share price and every deposit and withdrawal, and serves them labelled TESTNET", async () => {
     const { db, trader } = vaultTrader();
-    const io = stub(vaultReplies());
+    const io = answerWith(vaultReplies());
     try {
       await trader.syncMoney();
     } finally {
@@ -147,7 +147,7 @@ describe("the vault record (real testnet vault replies)", () => {
     const later = JSON.parse(VF.history.raw) as { history: Array<Record<string, unknown>> };
     Object.assign(later.history[0]!, { status: "completed", actual_usd: "9.95", execution_share_price: "0.995", executed_timestamp: Number(later.history[0]!.execute_at_timestamp) + 1_000 });
     for (const h of [VF.history.raw, JSON.stringify(later)]) {
-      const io = stub(vaultReplies(h));
+      const io = answerWith(vaultReplies(h));
       try {
         await trader.syncMoney();
       } finally {
@@ -162,7 +162,7 @@ describe("the vault record (real testnet vault replies)", () => {
 
   it("the vault's stop is on the share price: a payout lowers the start with the shares, so it never reads as a loss", async () => {
     const { db, trader } = vaultTrader();
-    const io = stub(vaultReplies());
+    const io = answerWith(vaultReplies());
     try {
       await trader.syncMoney();
     } finally {
@@ -185,7 +185,7 @@ describe("the vault record (real testnet vault replies)", () => {
 
   it("vault fills are served with network=vault and link to Strike's vault fills", async () => {
     const { db, trader } = vaultTrader();
-    const io = stub(vaultReplies());
+    const io = answerWith(vaultReplies());
     try {
       await trader.syncMoney();
     } finally {

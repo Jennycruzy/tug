@@ -476,7 +476,7 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
       mapping: { version: MAPPING_VERSION, fingerprint: MAPPING_FINGERPRINTS[MAPPING_VERSION] ?? null, markets_covered: allMappedMarkets().length },
       snapshots_since_record_start: { complete: counts.complete ?? 0, partial: counts.partial ?? 0, interrupted: counts.interrupted ?? 0 },
       fees_saved: fees ? { computed_at: fees.computed_at, ...(JSON.parse(fees.json) as FeesSaved | null ?? {}) } : null,
-      // Depth added is measured each minute while TUG's orders rest on Strike's books (from 23 Oct, G5).
+      // Depth added is measured each minute while TUG's orders rest on Strike's books (from 23 Oct).
       depth_added: depthAdded("mainnet"),
       evidence: { code: "https://github.com/Jennycruzy/tug", data: "https://github.com/Jennycruzy/tug-evidence" },
     };
