@@ -3,6 +3,7 @@ import { ago, useApi, type RecordReply } from "../api.js";
 import { walletsInBrowser, type WalletChoice } from "../wallet.js";
 
 const STRIKE_PAGE = "https://app.strikefinance.org/public-portfolio/@tug-mainnet";
+const STRIKE_TESTNET_PAGE = "https://testnet.strikefinance.org/public-portfolio/01a163bf-fb0a-77b0-86c0-03a62889ee01";
 const SAVED = "tug-connection";
 
 interface ConnectView {
@@ -69,11 +70,15 @@ function CopyOnStrike() {
         <li>Press Copy and choose Fixed Ratio.</li>
         <li>Enter an amount ($20 or more, Strike's minimum) and confirm. Strike copies each new TUG trade into your account.</li>
       </ol>
-      <p>
+      <p class="cta">
         <a class="btn primary" href={STRIKE_PAGE}>
           Copy TUG on Strike
         </a>
+        <a class="btn" href={STRIKE_TESTNET_PAGE}>
+          Try it with test money (testnet)
+        </a>
       </p>
+      <p class="fine">The testnet button opens TUG's testnet account on Strike testnet, which you can copy with test money.</p>
     </>
   );
 }
