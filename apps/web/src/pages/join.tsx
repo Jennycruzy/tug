@@ -46,39 +46,53 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return j;
 }
 
+type Net = "testnet" | "mainnet";
+
 export function JoinPage() {
+  // One choice for the whole page: copying TUG and TUG in your account both follow it.
+  const [network, setNetwork] = useState<Net>("mainnet");
   return (
     <section class="page">
       <h1>Join</h1>
-      <p class="lede">Three ways to use TUG on Strike.</p>
-      <CopyOnStrike />
+      <p class="lede">Three ways to use TUG on Strike. Choose real money or test money first.</p>
+      <div class="cta" role="radiogroup" aria-label="Network">
+        {(["mainnet", "testnet"] as const).map((n) => (
+          <button key={n} type="button" class={`btn ${network === n ? "primary" : ""}`} aria-pressed={network === n} onClick={() => setNetwork(n)}>
+            {n === "mainnet" ? "Mainnet (real money)" : "Testnet (test money)"}
+          </button>
+        ))}
+      </div>
+      <CopyOnStrike network={network} />
       <Vault />
-      <InYourAccount />
+      <InYourAccount network={network} />
     </section>
   );
 }
 
-function CopyOnStrike() {
+function CopyOnStrike({ network }: { network: Net }) {
+  const page = network === "mainnet" ? STRIKE_PAGE : STRIKE_TESTNET_PAGE;
   return (
     <>
-      <h2>1. Copy TUG on Strike</h2>
-      <p>TUG's live account is a Strike trader anyone can copy, with Strike's own copy trading.</p>
+      <h2>
+        1. Copy TUG on Strike {network === "testnet" && <span class="tag">TESTNET</span>}
+      </h2>
+      <p>
+        {network === "mainnet"
+          ? "TUG's live account is a Strike trader anyone can copy, with Strike's own copy trading."
+          : "TUG's testnet account runs the same rules with test money; copy it on Strike testnet to try copying for free."}
+      </p>
       <ol>
         <li>
-          Open <a href={STRIKE_PAGE}>TUG's page on Strike</a> and connect your wallet there.
+          Open <a href={page}>TUG's page on Strike{network === "testnet" ? " testnet" : ""}</a> and connect your wallet there.
         </li>
         <li>Press Copy and choose Fixed Ratio.</li>
         <li>Enter an amount ($20 or more, Strike's minimum) and confirm. Strike copies each new TUG trade into your account.</li>
       </ol>
-      <p class="cta">
-        <a class="btn primary" href={STRIKE_PAGE}>
-          Copy TUG on Strike
-        </a>
-        <a class="btn" href={STRIKE_TESTNET_PAGE}>
-          Try it with test money (testnet)
+      <p>
+        <a class="btn primary" href={page}>
+          {network === "mainnet" ? "Copy TUG on Strike" : "Copy TUG on Strike testnet"}
         </a>
       </p>
-      <p class="fine">The testnet button opens TUG's testnet account on Strike testnet, which you can copy with test money.</p>
     </>
   );
 }
@@ -112,10 +126,9 @@ function Vault() {
   );
 }
 
-function InYourAccount() {
+function InYourAccount({ network }: { network: Net }) {
   const nets = useApi<{ testnet: boolean; mainnet: boolean }>("/api/v1/connect/networks", 300_000);
   const mainnetOpen = nets.state === "ok" && nets.data.mainnet;
-  const [network, setNetwork] = useState<"testnet" | "mainnet">("testnet");
   const [saved, setSaved] = useState(load());
   const [wallets, setWallets] = useState<WalletChoice[]>([]);
   const [view, setView] = useState<ConnectView | null>(null);
@@ -195,7 +208,7 @@ function InYourAccount() {
   return (
     <>
       <h2>
-        3. TUG in your account {!mainnetOpen && <span class="tag">TESTNET</span>}
+        3. TUG in your account {network === "testnet" && <span class="tag">TESTNET</span>}
       </h2>
       <p>
         Connect your own wallet and TUG trades your own Strike account by the same rules, within a budget you set. Your
@@ -204,15 +217,7 @@ function InYourAccount() {
         stays listed on your Strike account until you remove it on <a href={keysPage}>Strike's API keys page</a>. TUG's
         builder fee is 0.01% of each trade.
       </p>
-      {mainnetOpen && (!view || view.status === "ended" || view.status === "failed") && (
-        <div class="cta" role="radiogroup" aria-label="Network">
-          {(["mainnet", "testnet"] as const).map((n) => (
-            <button key={n} type="button" class={`btn ${network === n ? "primary" : ""}`} aria-pressed={network === n} onClick={() => setNetwork(n)}>
-              {n === "mainnet" ? "Mainnet (real money)" : "Testnet (test money)"}
-            </button>
-          ))}
-        </div>
-      )}
+      {network === "mainnet" && !mainnetOpen && <p class="note">On mainnet this opens soon; choose Testnet above to try it now.</p>}
       {err && <p class="note err">{err}</p>}
       {busy && <p class="note">{busy}</p>}
 
