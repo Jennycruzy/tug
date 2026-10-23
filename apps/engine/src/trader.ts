@@ -294,14 +294,23 @@ export class Trader {
     const held = await this.ex.positions();
     const mark = (s: string) => this.marketsCache?.markets[s]?.mark_price ?? Number(w.price);
     const sign = w.side === "buy" ? 1 : -1;
-    // TUG's own orders already resting on the same side count as if filled.
-    const resting = (await this.ex.openOrders(w.symbol))
-      .filter((o) => o.ClientOrderID.startsWith(`tug-v${this.rules.version}-${this.cfg.network}-`) && o.Side.toLowerCase() === w.side)
-      .reduce((a, o) => a + Number(o.Size) - Number(o.Filled), 0);
+    const mine = (o: { ClientOrderID: string }) => o.ClientOrderID.startsWith(`tug-v${this.rules.version}-${this.cfg.network}-`);
+    // TUG's own orders waiting on every market it may trade count as if filled: here on the same side, elsewhere in full.
+    const symbols = this.cfg.markets !== "all" ? this.cfg.markets : Object.keys(this.marketsCache?.markets ?? (await strikeMarkets()).markets);
+    let elsewhere = 0;
+    let resting = 0;
+    for (const s of new Set([...symbols, ...Object.keys(held), w.symbol])) {
+      const orders = (await this.ex.openOrders(s)).filter(mine);
+      if (s === w.symbol) {
+        resting = orders.filter((o) => o.Side.toLowerCase() === w.side).reduce((a, o) => a + Number(o.Size) - Number(o.Filled), 0);
+      } else {
+        elsewhere += Math.abs(Number(held[s]?.size ?? 0)) * mark(s) + orders.reduce((a, o) => a + (Number(o.Size) - Number(o.Filled)) * Number(o.Price), 0);
+      }
+    }
     const before = Number(held[w.symbol]?.size ?? 0) + sign * resting;
     const after = before + sign * Number(w.size);
     if (Math.abs(after) <= Math.abs(before)) return true;
-    const gross = Object.entries(held).reduce((a, [s, p]) => a + (s === w.symbol ? 0 : Math.abs(Number(p.size)) * mark(s)), 0) + Math.abs(after) * mark(w.symbol);
+    const gross = elsewhere + Math.abs(after) * mark(w.symbol);
     const limit = this.cfg.budgetUsd * this.rules.gross_exposure_cap;
     if (gross <= limit + 1e-9) return true;
     logEvent(this.db, "trader", "warn", "This order would exceed your budget cap.", "E-BUDGET", { order: w, gross, limit, budget: this.cfg.budgetUsd });

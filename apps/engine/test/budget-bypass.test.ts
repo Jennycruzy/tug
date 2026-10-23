@@ -18,11 +18,15 @@ const NET = "cbadbeef";
 const BUDGET = 50; // limit: 50 × gross cap 2 = $100
 const PRICE = 2000;
 
-function account(positions: Array<{ symbol: string; size: number }>, resting: Array<{ side: "buy" | "sell"; size: number; mine?: boolean }> = []) {
+/** An account with these positions and these resting orders (on ETH-USD unless a symbol is given); TUG may trade ETH-USD and BTC-USD. */
+function account(positions: Array<{ symbol: string; size: number }>, resting: Array<{ side: "buy" | "sell"; size: number; mine?: boolean; symbol?: string }> = []) {
   const real = globalThis.fetch;
   globalThis.fetch = (async (url: string) => {
     if (url.includes("/v2/openOrders")) {
-      const orders = resting.map((o, i) => ({ ...ORDER, ClientOrderID: o.mine === false ? `someone-${i}` : `tug-v1-${NET}-${i}-ETH-USD-0`, Side: o.side, Size: String(o.size), Filled: "0" }));
+      const sym = new URL(url).searchParams.get("symbol");
+      const orders = resting
+        .filter((o) => (o.symbol ?? "ETH-USD") === sym)
+        .map((o, i) => ({ ...ORDER, Symbol: sym, Price: String(PRICE), ClientOrderID: o.mine === false ? `someone-${i}` : `tug-v1-${NET}-${i}-${sym}-0`, Side: o.side, Size: String(o.size), Filled: "0" }));
       return new Response(JSON.stringify({ count: orders.length, orders }), { status: 200 });
     }
     const list = positions.map((p) => ({ ...POSITION, symbol: p.symbol, size: String(p.size) }));
@@ -30,7 +34,7 @@ function account(positions: Array<{ symbol: string; size: number }>, resting: Ar
   }) as typeof fetch;
   const db = openDb(":memory:");
   const ex = new Executor(db, new StrikeSigned(SECRET, "https://example.invalid"), NET, { trading: true, killFile: "/nonexistent/kill" });
-  const t = new Trader(db, ex, rules, { network: NET, markets: "all", tradingOn: () => true, pausedFile: "/nonexistent/p", keyFile: { hex: SECRET }, budgetUsd: BUDGET });
+  const t = new Trader(db, ex, rules, { network: NET, markets: ["ETH-USD", "BTC-USD"], tradingOn: () => true, pausedFile: "/nonexistent/p", keyFile: { hex: SECRET }, budgetUsd: BUDGET });
   return { t, db, restore: () => (globalThis.fetch = real) };
 }
 const order = (side: "buy" | "sell", usd: number) => ({ symbol: "ETH-USD", side, price: String(PRICE), size: (usd / PRICE).toFixed(4) });
@@ -57,10 +61,10 @@ describe("budget bypass attempts (each must fail)", () => {
     }
   });
 
-  it("an opposite resting order does not make room: a $90 sell waiting does not allow a $100 buy", async () => {
-    const a = account([], [{ side: "sell", size: 90 / PRICE }]);
+  it("an opposite resting order does not make room: long $90 with a $90 sell waiting, a $60 buy is refused", async () => {
+    const a = account([{ symbol: "ETH-USD", size: 90 / PRICE }], [{ side: "sell", size: 90 / PRICE }]);
     try {
-      expect(await a.t.withinBudget(order("buy", 101))).toBe(false);
+      expect(await a.t.withinBudget(order("buy", 60))).toBe(false);
     } finally {
       a.restore();
     }
@@ -80,6 +84,17 @@ describe("budget bypass attempts (each must fail)", () => {
     const a = account([{ symbol: "ETH-USD", size: 95 / PRICE }], [{ side: "sell", size: 95 / PRICE, mine: false }]);
     try {
       expect(await a.t.withinBudget(order("buy", 10))).toBe(false);
+    } finally {
+      a.restore();
+    }
+  });
+
+  it("a TUG order waiting in another market counts: a $90 BTC buy waiting, then a $90 ETH buy is refused (the reviewer's probe)", async () => {
+    const a = account([], [{ symbol: "BTC-USD", side: "buy", size: 90 / PRICE }]);
+    try {
+      expect(await a.t.withinBudget(order("buy", 90))).toBe(false);
+      expect(await a.t.withinBudget(order("buy", 10))).toBe(true); // $90 + $10 = $100: at the limit
+      expect(await a.t.withinBudget({ symbol: "BTC-USD", side: "buy", price: String(PRICE), size: (20 / PRICE).toFixed(4) })).toBe(false);
     } finally {
       a.restore();
     }
@@ -106,6 +121,11 @@ describe("budget bypass attempts (each must fail)", () => {
 describe("budget changes outside the rules (each must fail)", () => {
   const KEK = Buffer.alloc(32, 7);
   async function active(c: Connect, network: "testnet" | "mainnet") {
+    const r = await verified(c, network);
+    c.activate({ id: r.id, token: r.token, budget_usd: 50, accept_risk: true });
+    return r;
+  }
+  async function verified(c: Connect, network: "testnet" | "mainnet") {
     const real = globalThis.fetch;
     let pub = "";
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
@@ -119,7 +139,6 @@ describe("budget changes outside the rules (each must fail)", () => {
     try {
       const r = await c.start({ network, chain: "solana", address: "Ee16BW5P6zYLfvKFXiTPVqhtWH5UuHqB9JX1DDjNRt6w" });
       await c.verify({ id: r.id, token: r.token, wallet_signature: "x".repeat(20) });
-      c.activate({ id: r.id, token: r.token, budget_usd: 50, accept_risk: true });
       return r;
     } finally {
       globalThis.fetch = real;
@@ -134,15 +153,23 @@ describe("budget changes outside the rules (each must fail)", () => {
     expect(() => c.activate({ id: r.id, token: r.token, budget_usd: 50, accept_risk: true })).toThrow();
   });
 
-  it("another connection's token controls nothing; nonsense budgets and a missing risk acknowledgement are refused", async () => {
+  it("another connection's token controls nothing", async () => {
     const c = new Connect(openDb(":memory:"), { kek: KEK, code: "tug", feeBps: 1, strikeUrl: "https://example.invalid", mainnet: { strikeUrl: "https://example.invalid", code: "tug" } });
     const a = await active(c, "testnet");
     const b = await active(c, "mainnet");
     expect(() => c.stop({ id: a.id, token: b.token, close_positions: false })).toThrow(/could not be verified/);
-    for (const budget of [-1, 0, 9.99, Number.NaN, 1e12, "50"]) {
-      expect(() => c.activate({ id: a.id, token: a.token, budget_usd: budget, accept_risk: true })).toThrow();
-    }
-    expect(() => c.activate({ id: a.id, token: a.token, budget_usd: 50, accept_risk: false })).toThrow();
     expect(c.view(b.id, b.token)).toMatchObject({ network: "mainnet", budget_usd: 50 });
+  });
+
+  it("on a fresh verified connection, nonsense budgets and a missing risk acknowledgement are refused, and a good budget then starts it", async () => {
+    const c = new Connect(openDb(":memory:"), { kek: KEK, code: "tug", feeBps: 1, strikeUrl: "https://example.invalid", mainnet: { strikeUrl: "https://example.invalid", code: "tug" } });
+    for (const network of ["testnet", "mainnet"] as const) {
+      const r = await verified(c, network);
+      const bad = [-1, 0, 9.99, Number.NaN, Number.POSITIVE_INFINITY, 1e12, "50", 10_001, ...(network === "mainnet" ? [1_001] : [])];
+      for (const budget of bad) expect(() => c.activate({ id: r.id, token: r.token, budget_usd: budget, accept_risk: true }), `${network} ${String(budget)}`).toThrow();
+      expect(() => c.activate({ id: r.id, token: r.token, budget_usd: 50, accept_risk: false })).toThrow();
+      expect(c.view(r.id, r.token).status).toBe("verified");
+      expect(c.activate({ id: r.id, token: r.token, budget_usd: 50, accept_risk: true })).toEqual({ status: "active", budget_usd: 50 });
+    }
   });
 });
