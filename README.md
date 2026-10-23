@@ -132,6 +132,12 @@ TypeScript throughout: an engine (Node, SQLite) with a recorder, a trader per ac
 API; a small Preact site; 132 passing tests and CI on every commit. The engine runs on one server under systemd. Keys are
 never in the repository; trading keys for connected accounts are stored encrypted and deleted on Stop.
 
+## Built in public
+
+- [Building TUG on X](https://x.com/jennyoliver57/status/2113455863729979900)
+- [The submission post on X](https://x.com/jennyoliver57/status/2113623125346664841)
+- The four findings filed with Strike: [strike-finance/strike-finance-skills issues #1–#4](https://github.com/strike-finance/strike-finance-skills/issues)
+
 ## Licence and notice
 
 MIT, see [LICENSE](LICENSE). Built on Strike's public API; not affiliated with Strike. Not investment advice.
