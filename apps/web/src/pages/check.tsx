@@ -46,7 +46,7 @@ export function CheckPage() {
           const j = (await (await fetch(`https://api.strikefinance.org/v2/history/fill?account_id=${LIVE_ACCOUNT}&limit=1000`)).json()) as {
             fills?: Array<Record<string, string | number>> | null;
           };
-          return (j.fills ?? []).map((f) => ({ id: Number(f.id), order_id: Number(f.order_id), price: Number(f.price), size: Number(f.size), fee: Number(f.fee) }));
+          return (j.fills ?? []).map((f) => ({ id: Number(f.id), order_id: Number(f.order_id), price: Number(f.price), size: Number(f.size), fee: Number(f.fee), ts: Number(f.timestamp) }));
         },
         progress: (step) => setNote(`Checked: ${step}`),
       });

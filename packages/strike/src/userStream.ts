@@ -28,11 +28,12 @@ export class UserStream {
   private readonly key: ReturnType<typeof createPrivateKey>;
 
   constructor(
-    keyFile: string,
+    /** A key file path, or the key itself (Builder Connect keys are decrypted in memory, never written to disk). */
+    key: string | { hex: string },
     private readonly on: Partial<UserStreamEvents>,
     private readonly opts: { vaultId?: string; url?: string; logonTimeoutMs?: number } = {},
   ) {
-    const k = keyFromHex(readFileSync(keyFile, "utf8"));
+    const k = keyFromHex(typeof key === "string" ? readFileSync(key, "utf8") : key.hex);
     this.publicKeyHex = k.publicKeyHex;
     this.key = k.key;
   }

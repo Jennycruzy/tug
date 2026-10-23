@@ -7,6 +7,7 @@ import type { Db } from "./db.js";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { LLMS_TXT, OPENAPI } from "./openapi.js";
+import type { Connect } from "./connect.js";
 
 export interface ApiContext {
   network: string;
@@ -22,6 +23,8 @@ export interface ApiContext {
   liveNickname?: string;
   /** The checkout of the evidence repository, served file by file for the browser check (`/check`). */
   evidenceDir?: string;
+  /** Builder Connect (TUG in your account), when TUG_KEK is set. */
+  connect?: Connect;
 }
 
 interface SnapshotRow {
@@ -482,6 +485,31 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
       depth_added: depthAdded("mainnet"),
       evidence: { code: "https://github.com/Jennycruzy/tug", data: "https://github.com/Jennycruzy/tug-evidence" },
     };
+  });
+
+  // TUG in your account (Builder Connect, testnet): each step answers {code, message} on failure. The control
+  // token goes in the x-tug-token header for reads, never in a URL.
+  const connectStep = (fn: (c: Connect, body: unknown) => unknown) => async (req: { body: unknown }, reply: { code: (n: number) => { send: (b: unknown) => unknown } }) => {
+    if (!ctx.connect) return reply.code(503).send({ code: "E-CONN", message: "TUG in your account is not open yet." });
+    try {
+      return await fn(ctx.connect, req.body);
+    } catch (e) {
+      const err = e as { code?: string; message?: string; issues?: unknown };
+      if (err.issues) return reply.code(400).send({ code: "E-INPUT", message: "Some of the details sent are not valid." });
+      return reply.code(400).send({ code: err.code ?? "E-CONN", message: err.message ?? "Your wallet connection could not be verified." });
+    }
+  };
+  app.post("/api/v1/connect/start", connectStep((c, b) => c.start(b)));
+  app.post("/api/v1/connect/verify", connectStep((c, b) => c.verify(b)));
+  app.post("/api/v1/connect/activate", connectStep((c, b) => c.activate(b)));
+  app.post("/api/v1/connect/stop", connectStep((c, b) => c.stop(b)));
+  app.get<{ Params: { id: string } }>("/api/v1/connect/:id", async (req, reply) => {
+    if (!ctx.connect) return reply.code(503).send({ code: "E-CONN", message: "TUG in your account is not open yet." });
+    try {
+      return ctx.connect.view(req.params.id, String(req.headers["x-tug-token"] ?? ""));
+    } catch (e) {
+      return reply.code(404).send({ code: "E-CONN", message: (e as Error).message });
+    }
   });
 
   // The evidence bundle for `/check`: MANIFEST.sha256 and only the files it lists, read as they are on disk.

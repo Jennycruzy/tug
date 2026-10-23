@@ -12,8 +12,10 @@ export interface TraderConfig {
   pausedFile: string;
   /** The live record's starting equity; read from the database once the first equity point exists. */
   startEquity?: number;
-  keyFile: string;
+  keyFile: string | { hex: string };
   vaultId?: string;
+  /** Builder Connect: the account's budget cap in USD. Targets are sized on it, and no order may take the account's gross exposure past it times the gross cap (E-BUDGET). */
+  budgetUsd?: number;
 }
 
 const RISK_EVERY_MS = 10_000;
@@ -220,7 +222,7 @@ export class Trader {
             .map((g) => [g.symbol, g.gap]),
         );
         const rules = this.marketsCache.rules;
-        this.targets = computeTargets(gaps, acct.equity, this.rules, (s) => rules[s]?.minNotional ?? 5);
+        this.targets = computeTargets(gaps, this.sizingEquity(acct.equity), this.rules, (s) => rules[s]?.minNotional ?? 5);
         this.targetsBoundary = boundary;
         logEvent(this.db, "trader", "info", "targets", undefined, { snapshot: snap.id, equity: acct.equity, targets: this.targets });
       }
@@ -255,7 +257,32 @@ export class Trader {
     const keep = w && mine.find((o) => o.Side.toLowerCase() === w.side && Number(o.Price) === Number(w.price) && Math.abs(Number(o.Size) - Number(o.Filled) - Number(w.size)) < 1e-12);
     for (const o of mine) if (o !== keep) await this.ex.cancel(symbol, o.ClientOrderID);
     // The risk guard runs on its own timer: re-check it before every placement.
-    if (w && !keep && this.mayPlace()) await this.placeWithRequote(w, 0);
+    if (w && !keep && this.mayPlace() && (await this.withinBudget(w))) await this.placeWithRequote(w, 0);
+  }
+
+  /** The equity targets are sized on: the account's, or its budget cap when that is lower (Builder Connect). */
+  sizingEquity(equity: number): number {
+    return this.cfg.budgetUsd !== undefined ? Math.min(equity, this.cfg.budgetUsd) : equity;
+  }
+
+  /**
+   * Builder Connect's hard limit, checked before every order whatever the targets say: the account's gross exposure
+   * after the order fills must stay within budget × the rules' gross cap. An order that would pass it is not sent
+   * (E-BUDGET). Orders that only reduce exposure always pass.
+   */
+  async withinBudget(w: { symbol: string; side: "buy" | "sell"; price: string; size: string }): Promise<boolean> {
+    if (this.cfg.budgetUsd === undefined) return true;
+    const held = await this.ex.positions();
+    const mark = (s: string) => this.marketsCache?.markets[s]?.mark_price ?? Number(w.price);
+    const signed = (Number(w.size) * (w.side === "buy" ? 1 : -1));
+    const before = Number(held[w.symbol]?.size ?? 0);
+    const after = before + signed;
+    if (Math.abs(after) <= Math.abs(before)) return true;
+    const gross = Object.entries(held).reduce((a, [s, p]) => a + (s === w.symbol ? 0 : Math.abs(Number(p.size)) * mark(s)), 0) + Math.abs(after) * mark(w.symbol);
+    const limit = this.cfg.budgetUsd * this.rules.gross_exposure_cap;
+    if (gross <= limit + 1e-9) return true;
+    logEvent(this.db, "trader", "warn", "This order would exceed your budget cap.", "E-BUDGET", { order: w, gross, limit, budget: this.cfg.budgetUsd });
+    return false;
   }
 
   /** Tests only: the account id the risk tick would have read from Strike. */
@@ -320,7 +347,7 @@ export class Trader {
   async sampleDepth(): Promise<void> {
     const open = this.db
       .prepare(
-        "SELECT o.symbol, o.side, o.price, CAST(o.size AS REAL) - COALESCE((SELECT SUM(f.size) FROM fills f WHERE f.network=o.network AND f.client_order_id=o.client_order_id),0) AS size FROM orders o WHERE o.network=? AND o.post_only=1 AND o.status IN ('pending','new','open','partially_filled') AND o.placed_at > ?",
+        "SELECT o.symbol, o.side, o.price, CAST(o.size AS REAL) - COALESCE((SELECT SUM(f.size) FROM fills f WHERE f.network=o.network AND (f.order_id=o.order_id OR f.client_order_id=o.client_order_id)),0) AS size FROM orders o WHERE o.network=? AND o.post_only=1 AND o.status IN ('pending','new','open','partially_filled') AND o.placed_at > ?",
       )
       .all(this.cfg.network, Date.now() - 24 * 3600_000) as Array<{ symbol: string; side: "buy" | "sell"; price: string; size: number }>;
     const ts = Date.now();

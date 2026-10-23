@@ -10,7 +10,12 @@ export interface Check {
   detail: string;
 }
 
+/** Strike fills newer than this before the export may not be synced yet (the trader reads fills every minute). */
+export const FILL_SYNC_MARGIN_MS = 10 * 60_000;
+
 interface Records {
+  /** When the bundle was written (ms): every Strike fill of the live account up to it, less the sync margin, is in it. */
+  exported_at?: number;
   paper: Array<{ snapshot_id: number; ts: number; equity: number; turnover: number; fees: number; funding: number }>;
   scoreboard: { copy_pnl: number; fade_pnl: number; copy_up: number; copy_active: number; fade_up: number; fade_active: number; snapshots: number } | null;
   fees_saved: { saved: number; baseline: { fees: number; turnover: number; orders: number; subscriptions: number }; tug: { fees: number; turnover: number } } | null;
@@ -51,7 +56,7 @@ export async function verifyEvidence(
     rulesSha256: string;
     sha256: (b: Uint8Array) => Promise<string>;
     gunzip: (b: Uint8Array) => Promise<Uint8Array>;
-    strikeFills?: () => Promise<Array<{ id: number; order_id: number; price: number; size: number; fee: number }>>;
+    strikeFills?: () => Promise<Array<{ id: number; order_id: number; price: number; size: number; fee: number; ts: number }>>;
     progress?: (step: string) => void;
   },
 ): Promise<Check[]> {
@@ -154,15 +159,29 @@ export async function verifyEvidence(
   const depthOk = d.minutesResting === w.minutesResting && d.markets.length === w.markets.length && d.markets.every((m, i) => m.symbol === w.markets[i]!.symbol && m.minutesResting === w.markets[i]!.minutesResting && close(m.avgShareOfBest, w.markets[i]!.avgShareOfBest) && close(m.avgShareOfTop5, w.markets[i]!.avgShareOfTop5));
   add("depth added", depthOk, `${d.minutesResting} minutes resting across ${d.markets.length} markets`);
 
-  // 5. Each live fill is on Strike's own public record, with the same price, size and fee.
+  // 5. Both ways: each live fill in the bundle is on Strike's public record with the same price, size and fee,
+  // and each fill Strike shows for the account up to the export time (less the sync margin) is in the bundle, so
+  // no fill (a losing one, say) can be left out.
   if (o.strikeFills) {
-    const strike = new Map((await o.strikeFills()).map((f) => [f.id, f]));
+    const fromStrike = await o.strikeFills();
+    const strike = new Map(fromStrike.map((f) => [f.id, f]));
     const live = fills.filter((f) => f.network === "mainnet");
-    const missing = live.filter((f) => {
+    const inBundle = new Set(live.map((f) => f.fill_id));
+    const differ = live.filter((f) => {
       const s = strike.get(f.fill_id);
       return !s || !close(s.price, f.price) || !close(s.size, f.size) || !close(s.fee, f.fee);
     });
-    add("Strike re-read", missing.length === 0, `${live.length - missing.length} of ${live.length} live fills match Strike's public fill history${missing.length ? `; differ: ${missing.map((f) => f.fill_id).join(", ")}` : ""}`);
+    const cutoff = (rec.exported_at ?? 0) - FILL_SYNC_MARGIN_MS;
+    const leftOut = fromStrike.filter((f) => f.ts <= cutoff && !inBundle.has(f.id));
+    const ok = differ.length === 0 && leftOut.length === 0 && rec.exported_at !== undefined;
+    add(
+      "Strike re-read",
+      ok,
+      `${live.length - differ.length} of ${live.length} live fills match Strike's public fill history; ${fromStrike.filter((f) => f.ts <= cutoff).length - leftOut.length} of ${fromStrike.filter((f) => f.ts <= cutoff).length} Strike fills before the export are in the bundle` +
+        (differ.length ? `; differ: ${differ.map((f) => f.fill_id).join(", ")}` : "") +
+        (leftOut.length ? `; left out: ${leftOut.map((f) => f.id).join(", ")}` : "") +
+        (rec.exported_at === undefined ? "; the bundle has no export time" : ""),
+    );
   }
   return out;
 }

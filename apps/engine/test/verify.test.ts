@@ -16,6 +16,8 @@ const opts = { rulesSha256: loaded.sha256 };
 const rulesFile = readFileSync(RULES_FILE);
 // Real fills of the live account (23 Oct), with Strike's fill ids, as stored by the trader.
 const LIVE = JSON.parse(readFileSync(new URL("./fixtures/live-mainnet-2026-10-23.json", import.meta.url), "utf8")) as { fills: Array<Record<string, string | number | null>> };
+// The bundle is written an hour after the last fill.
+const EXPORTED_AT = Math.max(...LIVE.fills.map((x) => Number(x.ts))) + 3600_000;
 
 /** The fixture's real snapshots with their records rebuilt, two real live fills and a few depth samples, exported. */
 function bundle() {
@@ -29,11 +31,11 @@ function bundle() {
   d.run("mainnet", 1792721000000, "CXMT-USD", "sell", 5.8361, 1.6, 1, 4.8, 20.1);
   d.run("mainnet", 1792721060000, "CXMT-USD", "sell", 5.8361, 1.6, 0, 3.2, 18.4);
   const dir = mkdtempSync(join(tmpdir(), "tug-ev-"));
-  const first = exportEvidence(db, dir, { recordStartMs: 0, salt: "test-salt", rulesFile });
+  const first = exportEvidence(db, dir, { recordStartMs: 0, salt: "test-salt", rulesFile, now: EXPORTED_AT });
   return { db, dir, first };
 }
 
-const strikeFromFixture = async () => LIVE.fills.map((x) => ({ id: Number(x.fill_id), order_id: Number(x.order_id), price: Number(x.price), size: Number(x.size), fee: Number(x.fee) }));
+const strikeFromFixture = async () => LIVE.fills.map((x) => ({ id: Number(x.fill_id), order_id: Number(x.order_id), price: Number(x.price), size: Number(x.size), fee: Number(x.fee), ts: Number(x.ts) }));
 
 describe("evidence bundle and pnpm verify (real recorded snapshots)", () => {
   it("T-VERIFY-1 every check passes on an untouched bundle, the Strike re-read included", async () => {
@@ -87,10 +89,22 @@ describe("evidence bundle and pnpm verify (real recorded snapshots)", () => {
     expect(checks.find((c) => c.name === "rules")!.ok).toBe(false);
   });
 
+  it("a Strike fill left out of the bundle (a hidden loss) fails the re-read; one newer than the sync margin does not", async () => {
+    const { dir } = bundle();
+    const real = await strikeFromFixture();
+    const hidden = { ...real[0]!, id: 999_999_001, ts: EXPORTED_AT - 3600_000 };
+    const fresh = { ...real[0]!, id: 999_999_002, ts: EXPORTED_AT - 60_000 };
+    const failed = await verifyBundle(dir, { ...opts, strikeFills: async () => [...real, hidden] });
+    expect(failed.find((c) => c.name === "Strike re-read")).toMatchObject({ ok: false });
+    expect(failed.find((c) => c.name === "Strike re-read")!.detail).toContain("left out: 999999001");
+    const passed = await verifyBundle(dir, { ...opts, strikeFills: async () => [...real, fresh] });
+    expect(passed.find((c) => c.name === "Strike re-read")!.ok).toBe(true);
+  });
+
   it("an unchanged database exports byte-identical files (nothing to commit)", () => {
     const { db, dir, first } = bundle();
     expect(first.written.length).toBeGreaterThan(3);
-    expect(exportEvidence(db, dir, { recordStartMs: 0, salt: "test-salt", rulesFile }).written).toEqual([]);
+    expect(exportEvidence(db, dir, { recordStartMs: 0, salt: "test-salt", rulesFile, now: EXPORTED_AT }).written).toEqual([]);
   });
 
   it("no Strike account id appears in the bundle: Strike members are pseudonyms", () => {

@@ -48,6 +48,8 @@ export class StrikeSigned {
     keyHex: string,
     readonly baseUrl: string = STRIKE_API_URL,
     private readonly bucket: WeightBucket = strikeBucket,
+    /** Builder Connect accounts: the builder fee in basis points sent with every order (X-Builder-Fee-Bps). */
+    readonly builderFeeBps?: number,
   ) {
     const k = keyFromHex(keyHex);
     this.key = k.key;
@@ -75,6 +77,7 @@ export class StrikeSigned {
         "X-API-Wallet-Signature": signature,
         "X-API-Wallet-Timestamp": String(ts),
         "X-API-Wallet-Nonce": nonce,
+        ...(method === "POST" && this.builderFeeBps !== undefined ? { "X-Builder-Fee-Bps": String(this.builderFeeBps) } : {}),
       },
       signal: AbortSignal.timeout(20_000),
     });

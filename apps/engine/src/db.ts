@@ -163,6 +163,28 @@ CREATE TABLE IF NOT EXISTS transfers (
   raw TEXT NOT NULL,
   PRIMARY KEY (network, id)
 );
+CREATE TABLE IF NOT EXISTS connections (
+  id TEXT PRIMARY KEY,
+  token_sha256 TEXT NOT NULL,
+  network TEXT NOT NULL,
+  chain TEXT NOT NULL,
+  address TEXT NOT NULL,
+  api_pubkey TEXT NOT NULL,
+  enc_privkey TEXT,
+  nonce TEXT,
+  account_id TEXT,
+  fee_share_bps INTEGER,
+  budget_usd REAL,
+  close_on_stop INTEGER NOT NULL DEFAULT 0,
+  start_equity REAL,
+  status TEXT NOT NULL,
+  error TEXT,
+  stop_report TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  started_at INTEGER,
+  ended_at INTEGER
+);
 CREATE TABLE IF NOT EXISTS depth_samples (
   network TEXT NOT NULL,
   ts INTEGER NOT NULL,

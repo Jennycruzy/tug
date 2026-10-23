@@ -2,7 +2,8 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertPublished, loadRules, setHttpEventSink, type Fingerprint } from "@tug/core";
 import { startApi } from "./api.js";
-import { API_PORT, BUSY_FILE, DB_FILE, NETWORK, RAW_DIR, REVISION, ROOT, RULES_FILE } from "./config.js";
+import { API_PORT, BUSY_FILE, DB_FILE, NETWORK, RAW_DIR, REVISION, ROOT, RULES_FILE, STRIKE_TESTNET_URL } from "./config.js";
+import { Connect, kekFrom } from "./connect.js";
 import { buildCrowds, loadLatestCrowds, type CrowdVersion } from "./crowds.js";
 import { logEvent, openDb } from "./db.js";
 import { takeSnapshot } from "./recorder.js";
@@ -108,6 +109,10 @@ if (NETWORK === "mainnet") {
       liveAccountId: process.env.TUG_ACCOUNT_ID,
       liveNickname: process.env.TUG_ACCOUNT_NICKNAME,
       evidenceDir: process.env.TUG_EVIDENCE_REPO_DIR ?? "/home/tug/tug-evidence",
+      // TUG in your account opens on testnet once the key-encryption key is configured.
+      connect: process.env.TUG_KEK
+        ? new Connect(db, { kek: kekFrom(process.env.TUG_KEK), code: process.env.TUG_CONNECT_BUILDER_CODE ?? "tug", feeBps: Number(process.env.TUG_BUILDER_FEE_BPS ?? 1), strikeUrl: STRIKE_TESTNET_URL })
+        : undefined,
     }, API_PORT);
   log("api listening", { port: API_PORT });
   process.on("exit", () => void api.close());

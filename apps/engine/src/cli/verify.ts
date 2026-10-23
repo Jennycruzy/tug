@@ -26,7 +26,7 @@ const checks = await verifyBundle(dir, {
     : async () => {
         const r = await fetch(`https://api.strikefinance.org/v2/history/fill?account_id=${LIVE_ACCOUNT}&limit=1000`, { headers: { "user-agent": "tug-verify" } });
         const j = (await r.json()) as { fills?: Array<Record<string, string | number>> | null };
-        return (j.fills ?? []).map((f) => ({ id: Number(f.id), order_id: Number(f.order_id), price: Number(f.price), size: Number(f.size), fee: Number(f.fee) }));
+        return (j.fills ?? []).map((f) => ({ id: Number(f.id), order_id: Number(f.order_id), price: Number(f.price), size: Number(f.size), fee: Number(f.fee), ts: Number(f.timestamp) }));
       },
 });
 for (const c of checks) console.log(`${c.ok ? "PASS" : "FAIL"}  ${c.name.padEnd(15)} ${c.detail}`);

@@ -15,7 +15,7 @@ import { snapshotRows } from "./records.js";
  * Strike account ids in crowds and positions are replaced by a salted pseudonym (the same member gets the same
  * pseudonym everywhere, so every record still recomputes): Strike traders are never listed one by one (§12, T-PRIV).
  */
-export function exportEvidence(db: Db, dir: string, o: { recordStartMs: number; salt: string; rulesFile: Buffer }): { written: string[]; files: number } {
+export function exportEvidence(db: Db, dir: string, o: { recordStartMs: number; salt: string; rulesFile: Buffer; now?: number }): { written: string[]; files: number } {
   const pseudo = (platform: string, id: string) => (platform === "strike" ? `s-${createHmac("sha256", o.salt).update(id).digest("hex").slice(0, 16)}` : id);
   const day = (ts: number) => new Date(ts).toISOString().slice(0, 10);
   const files = new Map<string, Buffer>();
@@ -78,6 +78,7 @@ export function exportEvidence(db: Db, dir: string, o: { recordStartMs: number; 
       .all();
     const d = depthSummary(depth.filter((x) => x.network === "mainnet").map((x) => ({ ts: x.ts, symbol: x.symbol, side: x.side, tugSize: x.tug_size, atBest: x.at_best === 1, bestTotal: x.best_total, top5Total: x.top5_total })));
     const records = {
+      exported_at: o.now ?? Date.now(),
       record_start: new Date(o.recordStartMs).toISOString(),
       snapshots: { complete: complete.length, partial: snaps.filter((s) => s.status === "PARTIAL").length, last_complete_id: complete.at(-1)?.id ?? null },
       paper,
