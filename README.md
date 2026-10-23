@@ -8,6 +8,7 @@ the side of the traders Strike says to copy, with orders that wait in the book. 
 money, and anyone can copy it on Strike in one tap.
 
 **[Live site](https://tug.38-49-216-59.sslip.io)** ·
+**[Demo video (2:25)](https://github.com/Jennycruzy/tug/releases/download/demo-2026-10-23/TUG-demo.mp4)** ·
 **[TUG on Strike](https://app.strikefinance.org/public-portfolio/@tug-mainnet)** ·
 **[Check it yourself](https://tug.38-49-216-59.sslip.io/check)** ·
 **[API](https://tug.38-49-216-59.sslip.io/api)** ·
