@@ -134,7 +134,7 @@ never in the repository; trading keys for connected accounts are stored encrypte
 
 ## Built in public
 
-- TUG on X: [building it](https://x.com/jennyoliver57/status/2113455863729979900) · [what it does](https://x.com/jennyoliver57/status/2113623125346664841)
+- TUG on X: [building it](https://x.com/jennyoliver57/status/2113455863729979900) · [what it does](https://x.com/jennyoliver57/status/2113627494540517760)
 - The four findings filed with Strike: [strike-finance/strike-finance-skills issues #1–#4](https://github.com/strike-finance/strike-finance-skills/issues)
 
 ## Licence and notice
