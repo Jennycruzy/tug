@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { openDb, type Db } from "../src/db.js";
 
-/** Real rows exported unchanged from the mainnet recorder database: snapshots 4–15 of 2026-10-22. */
+/** Real rows from the mainnet recorder database (snapshots 4–15 of 2026-10-22); Strike member ids are codes. */
 export const FIXTURE = JSON.parse(
   gunzipSync(readFileSync(new URL("./fixtures/record-2026-10-22-s4-15.json.gz", import.meta.url))).toString("utf8"),
 ) as Record<string, Array<Record<string, unknown>>>;
