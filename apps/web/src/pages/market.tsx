@@ -1,5 +1,5 @@
 import { useRoute } from "preact-iso";
-import { ago, signed, time, usd, useApi, type MarketReply, type MemberRow, type Side } from "../api.js";
+import { ago, day, time, usd, useApi, type MarketReply, type MemberRow, type Side } from "../api.js";
 import { useNow } from "../now.js";
 import { Rope, sideWords } from "../rope.js";
 
@@ -31,26 +31,30 @@ function Body({ d, now }: { d: MarketReply; now: number }) {
       <div class="card">
         <Rope m={m} />
         <div class="kv">
-          <span>TUG live</span>
-          <b>{sideWords(m.position.live)}</b>
-          <span>
-            <span class="tag">MODEL</span> position
-          </span>
-          <b>{sideWords(m.position.model)}</b>
-          <span>The gap</span>
-          <b>{signed(m.gap)}</b>
-          <span>Why</span>
+          <span>Copy picks</span>
+          <b class="c-copy">{leaning(m.copy)}</b>
+          <span>Fade picks</span>
+          <b class="c-fade">{leaning(m.fade)}</b>
+          <span>TUG's side</span>
           <b>{why(m.reason, m.tradable)}</b>
+          <span>How strong</span>
+          <b>{m.tradable ? `${Math.round(Math.abs(m.gap) * 100)} out of 100` : "No trade here"}</b>
+          <span>TUG now (real money)</span>
+          <b>{sideWords(m.position.live)}</b>
+          <span>Model account ($10,000)</span>
+          <b>{sideWords(m.position.model)}</b>
         </div>
       </div>
+      <h2>TUG's trades here</h2>
+      <Trades t={d.trades} />
       <h2>Who is pulling</h2>
       <div class="crowds">
         <Crowd title="Copy picks" cls="c-copy" s={m.copy} />
         <Crowd title="Fade picks" cls="c-fade" s={m.fade} />
       </div>
-      <h2>Lean over the last 24 hours</h2>
+      <h2>Which way each group leaned, last 24 hours</h2>
       <History h={d.history} />
-      <h2>Largest Hyperliquid members</h2>
+      <h2>Biggest positions here (Hyperliquid traders)</h2>
       <div class="crowds">
         <Members title="Copy picks" rows={d.top.copy} />
         <Members title="Fade picks" rows={d.top.fade} />
@@ -91,14 +95,56 @@ function Body({ d, now }: { d: MarketReply; now: number }) {
   );
 }
 
+/** "87% short", "all long", "even", or "none holding". */
+function leaning(s: Side): string {
+  if (s.n === 0) return "none holding";
+  const p = Math.round(Math.abs(s.lean) * 100);
+  if (p === 0) return "even";
+  return p === 100 ? `all ${s.lean > 0 ? "long" : "short"}` : `${p}% ${s.lean > 0 ? "long" : "short"}`;
+}
+
+/** TUG's live fills in this market, newest first, each with the line its order was placed for. */
+function Trades({ t }: { t: MarketReply["trades"] }) {
+  if (t.length === 0) return <p class="note">No live trades in this market yet.</p>;
+  return (
+    <div class="scroll">
+      <table class="members">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Trade</th>
+            <th>Fee</th>
+            <th>Why</th>
+          </tr>
+        </thead>
+        <tbody>
+          {t.map((x) => (
+            <tr key={`${x.order_id}-${x.at}`}>
+              <td>
+                {time(x.at)} {day(x.at).slice(5)}
+              </td>
+              <td>
+                {x.side === "buy" ? "Bought" : "Sold"} {x.size} at {x.price}
+                {x.role === "maker" ? " (waited in the book)" : ""}
+              </td>
+              <td class={x.fee < 0 ? "ok" : ""}>{x.fee < 0 ? `+$${(-x.fee).toFixed(5)} rebate` : `$${x.fee.toFixed(5)}`}</td>
+              <td>{x.why ?? "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /** Prices to six significant digits. */
 const price = (v: number | null) => (v === null ? "—" : String(Number(v.toPrecision(6))));
 
 function why(reason: string, tradable: boolean): string {
-  if (!tradable) return "No clear gap: TUG holds nothing here";
-  if (reason === "two_crowds") return "The two crowds pull opposite ways; TUG holds the copy picks' side";
-  if (reason === "copy_only") return "Only the copy picks hold enough here, and they lean hard";
-  return "Only the fade picks hold enough here, and they lean hard; TUG takes the other side";
+  if (!tradable) return "None: the two groups don't pull clearly apart here";
+  if (reason === "two_crowds") return "With the copy picks: the two groups pull opposite ways";
+  if (reason === "copy_only") return "With the copy picks: few fade picks hold it, and the copy picks lean hard one way";
+  return "Against the fade picks: few copy picks hold it, and the fade picks lean hard one way";
 }
 
 function Crowd({ title, cls, s }: { title: string; cls: string; s: Side }) {
@@ -112,8 +158,8 @@ function Crowd({ title, cls, s }: { title: string; cls: string; s: Side }) {
         <b>{usd(s.long)}</b>
         <span>Short</span>
         <b>{usd(s.short)}</b>
-        <span>Lean</span>
-        <b>{s.n === 0 ? "—" : `${s.lean > 0 ? "long" : s.lean < 0 ? "short" : "even"} ${Math.round(Math.abs(s.lean) * 100)}%`}</b>
+        <span>Leaning</span>
+        <b>{leaning(s)}</b>
       </div>
     </div>
   );
@@ -184,7 +230,7 @@ function History({ h }: { h: MarketReply["history"] }) {
       </svg>
       <figcaption>
         <span>
-          long +1 at the top, short −1 at the bottom · {time(t0)} to {time(t1)}
+          all long at the top, all short at the bottom · {time(t0)} to {time(t1)}
         </span>
         <span>
           <i class="pin copy" /> copy picks{none("copy") ? " (none holding)" : ""} <i class="pin fade" /> fade picks

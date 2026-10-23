@@ -205,11 +205,11 @@ describe("TUG in your account (Builder Connect)", () => {
     expect(c.view(r.id, r.token).stop_report).toMatchObject({ strike_api_keys_page: "https://testnet.strikefinance.org/api-keys" });
   });
 
-  it("Stop logs E-STOP-OPEN from the third try while an order will not go away, and never deletes the key meanwhile", async () => {
+  it("Stop logs E-STOP-OPEN from the third try (once a minute at most) while an order will not go away, and never deletes the key meanwhile", async () => {
     const { db, prefix, order } = await stoppingConnection();
     const stuck = [{ ...order, ClientOrderID: `${prefix}9-ETH-USD-0` }];
     const runner = new ConnectRunner(db, rules, { kek: KEK, strikeUrl: TESTNET, feeBps: 1, stateDir: "/nonexistent", killFile: "/nonexistent/kill", pollMs: 1 });
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       const io = answerWith((method, url, body) =>
         method === "DELETE"
           ? { status: 200, raw: JSON.stringify({ order_id: 1, client_order_id: body?.client_order_id, symbol: "ETH-USD", sequence_id: 1, message_id: "1-0" }) }

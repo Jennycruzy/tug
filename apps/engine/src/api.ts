@@ -143,6 +143,9 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
      WHERE p.snapshot_id=? AND p.symbol=?`,
   );
 
+  const marketTradesQ = db.prepare(
+    "SELECT f.ts AS at, f.side, f.size, f.price, f.role, f.fee, f.realized_pnl AS realized, (SELECT o.reason FROM orders o WHERE o.network=f.network AND (o.order_id=f.order_id OR o.client_order_id=f.client_order_id) LIMIT 1) AS why, f.order_id FROM fills f WHERE f.network='mainnet' AND f.symbol=? ORDER BY f.ts DESC LIMIT 10",
+  );
   app.get<{ Params: { symbol: string } }>("/api/v1/tug/:symbol", async (req, reply) => {
     const symbol = req.params.symbol.toUpperCase();
     if (!SYMBOL.test(symbol)) return reply.code(400).send({ code: "E-SYMBOL", message: "Markets look like ETH-USD." });
@@ -175,6 +178,8 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
         fade: strikeFade(),
       },
       history: historyQ.all(symbol, ctx.network, Date.now() - DAY),
+      // TUG's last live fills in this market, each with the one line its order was placed for.
+      trades: (marketTradesQ.all(symbol) as Array<{ at: number; side: string; size: number; price: number; role: string | null; fee: number; realized: number; why: string | null; order_id: number | null }>),
     };
   });
 

@@ -7,7 +7,7 @@ const REASON: Record<Market["reason"], string> = {
   two_crowds: "The crowds pull opposite ways",
   copy_only: "Copy picks only, leaning hard",
   fade_only: "Fade picks only, leaning hard",
-  none: "No clear gap",
+  none: "No trade here",
 };
 
 function RopeRow({ m }: { m: Market }) {
@@ -29,9 +29,7 @@ function RopeRow({ m }: { m: Market }) {
           Fade picks {m.fade.n} · {netWords(m.fade)}
         </span>
       </div>
-      <div class="row-model">
-        <span class="tag">MODEL</span> {sideWords(m.position.model)}
-      </div>
+      <div class="row-model">Model account: {sideWords(m.position.model)}</div>
     </a>
   );
 }
@@ -53,17 +51,18 @@ export function Home() {
             wait in the book.
           </p>
           <div class="cta">
-            <a class="btn primary" href="#markets">
-              Watch every market
+            <a class="btn primary" href="https://app.strikefinance.org/public-portfolio/@tug-mainnet">
+              Copy TUG on Strike
             </a>
-            <a class="btn" href="/record">
-              See the record
+            <a class="btn" href="#markets">
+              Watch every market
             </a>
           </div>
         </div>
         {load.state === "ok" ? <HeroRope markets={load.data.markets} /> : <HeroRope markets={[]} />}
       </section>
 
+      <Strengths />
       {load.state === "ok" && <Facts data={load.data} now={now} />}
 
       <section class="how" aria-labelledby="how-h">
@@ -99,6 +98,37 @@ export function Home() {
         <Guards />
       </section>
     </>
+  );
+}
+
+/** What already runs, each with the place to check it. */
+function Strengths() {
+  const p = useApi<ProofReply>("/api/v1/proof", 300_000);
+  const d = p.state === "ok" ? p.data.depth_added : null;
+  const f = p.state === "ok" ? p.data.fees_saved : null;
+  return (
+    <section class="strengths" aria-label="Running now">
+      <a href="https://app.strikefinance.org/public-portfolio/@tug-mainnet">
+        <b>Live on Strike</b>
+        <span>Real money, every fill on Strike's public page. Anyone can copy it.</span>
+      </a>
+      <a href="/record">
+        <b>{d && d.fills > 0 ? `${d.maker_fills} of ${d.fills} fills` : "Maker orders only"}</b>
+        <span>waited in the book and earned Strike's rebate instead of paying a fee.</span>
+      </a>
+      {f && (
+        <a href="/proof">
+          <b>{usd(f.baseline.fees)} vs {f.tug.fees <= 0 ? `+${usd(-f.tug.fees)}` : usd(f.tug.fees)}</b>
+          <span>
+            fees copying all {f.baseline.subscriptions} copy picks one by one, against TUG's rebates, on ${f.capital.toLocaleString("en-US")}.
+          </span>
+        </a>
+      )}
+      <a href="/check">
+        <b>Check every number</b>
+        <span>Your browser recomputes the record and matches each fill with Strike.</span>
+      </a>
+    </section>
   );
 }
 

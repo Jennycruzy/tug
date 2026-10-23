@@ -323,3 +323,12 @@ body.embedded { background: var(--card); }
   .top-wrap { height: auto; min-height: 56px; padding-top: 8px; padding-bottom: 8px; }
   .top nav { flex-wrap: wrap; justify-content: flex-end; overflow: visible; row-gap: 2px; }
 }
+
+/* What already runs, under the headline */
+.strengths { max-width: 1040px; margin: 8px auto 0; padding: 0 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.strengths a { display: grid; gap: 4px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); text-decoration: none; color: var(--ink); transition: border-color 0.15s ease; }
+.strengths a:hover { border-color: var(--muted); }
+.strengths b { font: 700 16px/1.25 var(--display); }
+.strengths span { color: var(--muted); font-size: 13px; line-height: 1.4; }
+@media (max-width: 860px) { .strengths { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 420px) { .strengths { grid-template-columns: 1fr; } }

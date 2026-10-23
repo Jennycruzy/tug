@@ -31,6 +31,7 @@ interface StopReport {
 export class ConnectRunner {
   private readonly running = new Map<string, { trader: Trader; ex: Executor }>();
   private readonly stopTries = new Map<string, number>();
+  private readonly stopLoggedAt = new Map<string, number>();
 
   constructor(
     private readonly db: Db,
@@ -122,11 +123,16 @@ export class ConnectRunner {
     if (r && !clear) {
       // Something is still open: keep the key so TUG can still cancel or close it, and try again next pass.
       this.db.prepare("UPDATE connections SET stop_report=?, updated_at=? WHERE id=?").run(JSON.stringify(report), now, row.id);
-      if (tries >= 3) logEvent(this.db, "connect", "error", "Stop could not clear TUG's orders or positions yet; trying again", "E-STOP-OPEN", { id: row.id, ...report });
+      // Logged from the third try, at most once a minute (a pass runs every 10 s).
+      if (tries >= 3 && now - (this.stopLoggedAt.get(row.id) ?? 0) >= 60_000) {
+        logEvent(this.db, "connect", "error", "Stop could not clear TUG's orders or positions yet; trying again", "E-STOP-OPEN", { id: row.id, ...report });
+        this.stopLoggedAt.set(row.id, now);
+      }
       return;
     }
     report.key = "deleted";
     this.stopTries.delete(row.id);
+    this.stopLoggedAt.delete(row.id);
     this.db.prepare("UPDATE connections SET status='ended', enc_privkey=NULL, stop_report=?, ended_at=?, updated_at=? WHERE id=?").run(JSON.stringify(report), now, now, row.id);
     logEvent(this.db, "connect", "info", "connection ended: TUG's copy of the key deleted", undefined, { id: row.id, ...report });
   }

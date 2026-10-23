@@ -66,6 +66,7 @@ const schemas: Record<string, Schema> = {
     top: obj({ copy: arr(ref("Member")), fade: arr(ref("Member")) }),
     strike: obj({ copy: arr(ref("Member")), fade: obj({ n: int, net: nullable(num) }) }),
     history: arr(obj({ at: int, lean_copy: num, lean_fade: num, n_copy: int, n_fade: int, gap: num })),
+    trades: arr(obj({ at: int, side: str, size: num, price: num, role: nullable(str), fee: num, realized: num, why: nullable(str), order_id: nullable(int) })),
   }),
   Crowds: obj({
     network: str,
