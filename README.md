@@ -8,7 +8,7 @@ the side of the traders Strike says to copy, with orders that wait in the book. 
 money, and anyone can copy it on Strike in one tap.
 
 **[Live site](https://tug.38-49-216-59.sslip.io)** ·
-**[Demo video (2:25)](https://github.com/Jennycruzy/tug/releases/download/demo-2026-10-23/TUG-demo.mp4)** ·
+**[Demo video (2:25)](https://www.youtube.com/watch?v=Qm_TDdFiiRM)** ·
 **[TUG on Strike](https://app.strikefinance.org/public-portfolio/@tug-mainnet)** ·
 **[Check it yourself](https://tug.38-49-216-59.sslip.io/check)** ·
 **[API](https://tug.38-49-216-59.sslip.io/api)** ·
@@ -33,6 +33,19 @@ money, and anyone can copy it on Strike in one tap.
 
 Figures as of 23 Oct 2026, 09:45 UTC. The live versions are on the [site](https://tug.38-49-216-59.sslip.io/record)
 and in the [API](https://tug.38-49-216-59.sslip.io/api/v1/proof).
+
+## Who it's for
+
+- **A Strike trader who wants copy trading without picking traders.** Strike lists thousands of copyable traders. Copy
+  TUG with $20 and you hold, in one position per market, where 300 of Strike's best-scored traders stand against the
+  ones Strike says to fade, with orders that wait in the book and earn rebates. One subscription instead of hundreds.
+- **A trader who would rather keep their own account.** Connect a wallet on the Join page, set a budget, and TUG trades
+  your own Strike account by the same rules; Stop ends it at any time.
+- **Strike.** Every TUG order rests on Strike's books and adds depth; every order from a connected account carries a
+  builder code, so it is attributed volume on Strike; and the widget can show, next to any trader on Strike's copy page,
+  whether the copy picks and the fade picks agree on that market.
+- **Builders and analysts.** A free API of what Strike's highest- and lowest-scored traders hold, market by market,
+  every five minutes, with the scoreboard of how each group has done.
 
 ## Why it matters for Strike
 
@@ -67,6 +80,16 @@ every 15 min targets ──► orders that wait at the best price on Strike ─�
 always       Strike's live account stream ──► record; risk guard (stops at a 25% loss)
 every hour   evidence ──► github.com/Jennycruzy/tug-evidence
 ```
+
+## What's next
+
+- **A mainnet vault.** The same engine already trades a Strike vault on testnet with deposits and withdrawals; on
+  mainnet a depositor gets TUG with no setup and no per-market minimums, and the vault adds resting depth on every market.
+- **Every market at once.** At small sizes Strike's order minimums let the live account hold four or five markets; a
+  larger account or the vault holds every market with a signal, as the $10,000 model account does.
+- **On Strike's copy page.** The widget and API are ready for Strike to show, beside each trader, what the crowd of copy
+  picks and fade picks is doing in that market.
+- **Your own settings.** Connected accounts choosing their markets and leverage within the published rules.
 
 ## Use it
 
