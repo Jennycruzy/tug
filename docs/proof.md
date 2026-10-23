@@ -44,6 +44,8 @@ account is listed.
 | Every number regenerates from the evidence | `packages/core/src/verify.ts`, `apps/engine/src/evidence.ts` | T-VERIFY-1..3 |
 | Strike fade picks are never shown one by one | `apps/engine/src/api.ts`, `apps/web/src/pages/market.tsx` | T-PRIV-1..2 |
 | The vault runs on Strike testnet only | `apps/engine/src/config.ts` (`vaultNetworkError`) | vault tests |
+| A connected account is never traded past its budget (× the gross cap); mainnet budgets are at most $1,000 | `apps/engine/src/trader.ts` (`withinBudget`), `apps/engine/src/connect.ts` | T-CONN-1..4 |
+| Stop keeps the key until no TUG order or position is left, then deletes TUG's copy | `apps/engine/src/connectRunner.ts` (`wind`) | Stop tests |
 
 ## Strike capabilities used
 
@@ -59,5 +61,6 @@ account is listed.
 | User stream | Orders, fills, refusals within milliseconds | `packages/strike/src/userStream.ts` | [/status](https://tug.38-49-216-59.sslip.io/status) |
 | Deposit history | Money put in, from Strike's own records | `apps/engine/src/trader.ts` (`syncTransfers`) | [TUG's deposits on Strike](https://api.strikefinance.org/v2/history/transaction?account_id=01a16637-81cb-7682-b614-4728271550aa&type=deposit,withdraw) |
 | Copy trading: TUG is a lead trader | One tap to follow TUG | Strike's own copy trading | [TUG on Strike](https://app.strikefinance.org/public-portfolio/@tug-mainnet) |
+| Builder codes and builder connect (mainnet code `tug`, 0.01%) | TUG in your account: a person's wallet signs Strike's message, TUG trades their account within their budget, with the builder fee on each order | `apps/engine/src/connect.ts`, `apps/engine/src/connectRunner.ts` | [/join](https://tug.38-49-216-59.sslip.io/join) |
 | Vault-leader API (testnet) | TUG as a Strike vault | `apps/engine/src/executor.ts` (`vault_id`), `apps/engine/src/trader.ts` (`syncVault`) | [TUG vault on Strike testnet](https://testnet.strikefinance.org/vaults/d7e255eb-509f-5cd7-8e15-ab95ef639c3f) |
 | Public fill history | Check it yourself | `packages/core/src/verify.ts` | [/check](https://tug.38-49-216-59.sslip.io/check) |

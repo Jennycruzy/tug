@@ -26,7 +26,7 @@ money, and anyone can copy it on Strike in one tap.
 | **Strike's scores, read every 5 minutes** | 300 copy picks and 285 fade picks, on Strike and Hyperliquid, across all 33 Strike markets: 262 complete snapshots since 22 Oct. |
 | **The idea, measured before launch** | In the 7 days before TUG started, 71 of 93 of Strike's top copy picks gained and 74 of 100 of its fade picks lost, on Strike-listed markets ([script and data](https://github.com/Jennycruzy/tug-evidence/tree/main/pre-record)). |
 | **A Strike vault on testnet** | The same rules trading a [Strike vault](https://testnet.strikefinance.org/vaults/d7e255eb-509f-5cd7-8e15-ab95ef639c3f) with a second account's deposit and a withdrawal in progress. |
-| **TUG in your account** | Connect a wallet (Cardano, Ethereum or Solana) and TUG trades your own Strike testnet account within a budget you set, through Strike's builder codes. |
+| **TUG in your account, on mainnet** | Connect a wallet (Cardano, Ethereum or Solana) and TUG trades your own Strike account with the same rules, within a budget you set (up to $1,000 of real money), through Strike's builder codes. Testnet too, for trying it with test money. |
 | **Check every number yourself** | One command or one browser page downloads the evidence, checks every file's fingerprint, recomputes every record and matches each live fill against Strike's own records. |
 
 Figures as of 23 Oct 2026, 09:45 UTC. The live versions are on the [site](https://tug.38-49-216-59.sslip.io/record)
@@ -66,8 +66,9 @@ every hour   evidence ──► github.com/Jennycruzy/tug-evidence
 
 - **Copy TUG on Strike:** open [TUG's page on Strike](https://app.strikefinance.org/public-portfolio/@tug-mainnet),
   press Copy, choose Fixed Ratio, enter $20 or more.
-- **TUG in your account (testnet):** on the [Join page](https://tug.38-49-216-59.sslip.io/join), connect a wallet,
-  set a budget, start. Stop cancels TUG's orders and deletes its key.
+- **TUG in your account (mainnet or testnet):** on the [Join page](https://tug.38-49-216-59.sslip.io/join), choose
+  mainnet or testnet, connect a wallet, set a budget, start. TUG uses the key Strike gives it only to place and cancel
+  orders, and charges a 0.01% builder fee. Stop cancels TUG's orders and deletes its copy of the key.
 - **The testnet vault:** deposit on [Strike testnet](https://testnet.strikefinance.org/vaults/d7e255eb-509f-5cd7-8e15-ab95ef639c3f)
   and watch the share price.
 - **The data:** a free API and a one-line widget for any page. See [docs/integration.md](docs/integration.md).

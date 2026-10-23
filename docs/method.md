@@ -85,7 +85,14 @@ Code: `packages/core/src/risk.ts`.
 Code: `packages/core/src/records.ts`, `packages/core/src/fees.ts`, `packages/core/src/depth.ts`. Every record is
 recomputed from the stored inputs and checked by `pnpm verify` ([docs/proof.md](proof.md)).
 
-## 8. Testnet
+## 8. TUG in your account
 
-Strike's testnet has a usable book only on ETH-USD, so the vault and connected accounts trade ETH-USD with the
-same targets, labelled TESTNET.
+A connected account follows the same targets as TUG's own account, sized on the smaller of its equity and the
+budget its owner set, and an order that would take its total exposure past twice the budget is not sent. On mainnet
+the budget is at most $1,000 and every Strike market can be traded; each order carries TUG's builder fee of 0.01%.
+Code: `apps/engine/src/connect.ts`, `apps/engine/src/connectRunner.ts`, `apps/engine/src/trader.ts` (`withinBudget`).
+
+## 9. Testnet
+
+Strike's testnet has a usable book only on ETH-USD, so the vault and testnet connected accounts trade ETH-USD with
+the same targets, labelled TESTNET.
