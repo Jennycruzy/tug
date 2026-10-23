@@ -243,6 +243,7 @@ const schemas: Record<string, Schema> = {
     errors_24h: obj({
       warn: int,
       error: int,
+      last_error_at: nullable(int),
       recent: arr(obj({ ts: int, network: nullable(str), component: str, level: str, code: nullable(str), message: str })),
     }),
   }),

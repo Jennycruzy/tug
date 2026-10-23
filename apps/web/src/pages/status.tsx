@@ -17,6 +17,7 @@ export function Status() {
 }
 
 function Body({ s, now }: { s: StatusReply; now: number }) {
+  const lastError = s.errors_24h.last_error_at;
   const last = s.recorder.last_complete;
   const fresh = last !== null && now - last.at < STALE_MS;
   return (
@@ -41,9 +42,12 @@ function Body({ s, now }: { s: StatusReply; now: number }) {
           mainnet {s.trading.kill_switch.mainnet}, testnet {s.trading.kill_switch.testnet}
         </b>
         <span>Errors, last 24 h</span>
-        <b class={s.errors_24h.error ? "bad" : "ok"}>
-          {s.errors_24h.error} errors, {s.errors_24h.warn} warnings
+        <b class={lastError && now - lastError < 3600_000 ? "bad" : "ok"}>
+          {s.errors_24h.error === 0 ? "None" : `${s.errors_24h.error} (the last one ${ago(lastError!, now)}; each is listed below)`}
+          {s.errors_24h.warn ? ` · ${s.errors_24h.warn} warnings` : ""}
         </b>
+        <span>Kill switch, vault</span>
+        <b>{s.trading.kill_switch.vault}</b>
       </div>
 
       <h2>Recent snapshots</h2>

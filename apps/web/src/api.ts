@@ -57,12 +57,12 @@ export interface StatusReply {
     recent: Array<{ id: number; at: number; status: string; errors: number }>;
   };
   crowds: { id: number; pulled_at: number; copy_count: number; fade_count: number } | null;
-  trading: { mainnet: "on" | "off"; kill_switch: { mainnet: "on" | "off"; testnet: "on" | "off" } };
+  trading: { mainnet: "on" | "off"; kill_switch: { mainnet: "on" | "off"; testnet: "on" | "off"; vault: "on" | "off" } };
   orders: {
     open: Record<string, number>;
     recent: Array<{ client_order_id: string; network: string; order_id: number | null; symbol: string; side: string; price: string; size: string; status: string; placed_at: number; updated_at: number }>;
   };
-  errors_24h: { warn: number; error: number; recent: Array<{ ts: number; component: string; level: string; code: string | null; message: string }> };
+  errors_24h: { warn: number; error: number; last_error_at: number | null; recent: Array<{ ts: number; component: string; level: string; code: string | null; message: string }> };
 }
 
 export type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ok"; data: T };

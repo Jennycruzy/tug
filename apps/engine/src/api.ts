@@ -187,6 +187,7 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
   const lastCrowdQ = db.prepare("SELECT id, pulled_at, copy_count, fade_count FROM crowd_versions WHERE network=? ORDER BY id DESC LIMIT 1");
   const eventCountQ = db.prepare("SELECT level, COUNT(*) AS n FROM events WHERE ts>=? AND level IN ('warn','error') GROUP BY level");
   // The event's own message is never read here: the public reply carries the code's fixed sentence only.
+  const lastErrorQ = db.prepare("SELECT MAX(ts) AS ts FROM events WHERE ts>=? AND level='error'");
   const eventsQ = db.prepare("SELECT ts, network, component, level, code FROM events WHERE ts>=? AND level IN ('warn','error') ORDER BY ts DESC LIMIT 20");
   const ordersQ = db.prepare("SELECT client_order_id, network, order_id, symbol, side, price, size, status, placed_at, updated_at FROM orders ORDER BY placed_at DESC LIMIT 10");
   const openCountQ = db.prepare("SELECT network, COUNT(*) AS n FROM orders WHERE status IN ('pending','open','partially_filled') GROUP BY network");
@@ -213,6 +214,7 @@ export function buildApi(db: Db, ctx: ApiContext): FastifyInstance {
       errors_24h: {
         warn: counts.warn ?? 0,
         error: counts.error ?? 0,
+        last_error_at: (lastErrorQ.get(since) as { ts: number | null }).ts,
         recent: (eventsQ.all(since) as Array<{ ts: number; network: string | null; component: string; level: string; code: string | null }>).map((e) => ({ ...e, message: publicSentence(e.code) })),
       },
     };
